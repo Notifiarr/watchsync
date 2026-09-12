@@ -1,0 +1,30 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+mkdir -p /config/logs/{nginx,php}
+
+touch /config/worker_processes.conf
+if ! grep -q 'worker_processes' /config/worker_processes.conf; then
+    WORKER_PROCESSES=$(nproc)
+    echo "**** setting worker_processes to ${WORKER_PROCESSES} ****"
+    echo -e "# This file is auto-generated only on first start, based on the cpu cores detected. Feel free to change it to any other number or to auto to let nginx handle it automatically.\n\nworker_processes ${WORKER_PROCESSES};" >/config/worker_processes.conf
+fi
+
+cp /etc/nginx/template.conf /etc/nginx/nginx.conf
+
+if [ "${DISABLE_IPV6:-0}" = "1" ]; then
+    sed -i '/listen \[::\]:80/d' /etc/nginx/nginx.conf
+    echo "**** DISABLE_IPV6=1, patched nginx.conf to disable IPv6 ****"
+fi
+
+BASE_URL=$( [ -f /config/base-url.txt ] && cat /config/base-url.txt || echo / )
+[ "$BASE_URL" = "/" ] && BASE_URL=""
+
+sed -i -e "s|\${BASE_URL}|${BASE_URL}|g" /etc/nginx/nginx.conf
+echo "**** patched nginx.conf with BASE_URL=${BASE_URL:-/} ****"
+
+find /config ! -user abc -exec chown abc {} +
+
+echo 's6-overlay init require(/app/www/public/startup.php) ->'
+s6-setuidgid abc php -r "require '/app/www/public/startup.php';"
+echo 's6-overlay init require(/app/www/public/startup.php) <-'

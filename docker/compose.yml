@@ -1,0 +1,17 @@
+# Deploy a development environment for Watchsync
+---
+services:
+  watchsync:
+    container_name: ws_develop
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - DISABLE_IPV6=1
+    ports:
+      - 32399:80/tcp
+    volumes:
+      - ./.data/watchsync/config:/config
+      - ../root/app/www/public:/app/www/public
+    restart: unless-stopped
+    image: ghcr.io/notifiarr/watchsync:local
