@@ -1,0 +1,218 @@
+:root {
+  --header-height: 64px;
+  --footer-height: 44px;
+  --sidebar-width: 260px;
+}
+
+@media screen and (max-width: 600px) {
+    .table-no-squish {
+        width: auto !important;
+        white-space: nowrap;
+    }
+}
+
+body {
+  min-height: 100vh;
+  padding-top: var(--header-height);
+  padding-bottom: var(--footer-height);
+}
+
+.app-header {
+  height: var(--header-height);
+  z-index: 1040;
+}
+
+.app-footer {
+  height: var(--footer-height);
+  z-index: 1040;
+  overflow: visible;
+}
+
+.app-footer .container-fluid {
+  overflow: visible;
+}
+
+.sidebar-desktop {
+  position: fixed;
+  top: var(--header-height);
+  bottom: var(--footer-height);
+  left: 0;
+  width: var(--sidebar-width);
+  overflow-y: auto;
+  border-right: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+}
+
+.content-wrapper {
+  margin-left: var(--sidebar-width);
+  padding: 1rem;
+}
+
+.menu-link {
+  border-radius: 0.5rem;
+}
+
+.menu-link i {
+  width: 1.5rem;
+}
+
+#popout-slider .loa-popup-content.loa-popup-has-header {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+#popout-slider .loa-popup-content.loa-popup-has-header .loa-popup-inner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+#popout-slider .loa-popup-content.loa-popup-has-header .card-header {
+  flex-shrink: 0;
+}
+
+#popout-slider .loa-popup-content.loa-popup-has-header .card-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@media (max-width: 991.98px) {
+  .sidebar-desktop {
+    display: none;
+  }
+
+  .content-wrapper {
+    margin-left: 0;
+  }
+}
+
+.text-small {
+    font-size: small;
+}
+
+#syncHistory table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+#syncHistory .sync-history-started {
+    width: 9% !important;
+}
+
+#syncHistory .sync-history-runtime {
+    width: 8% !important;
+}
+
+#syncHistory .sync-history-remove {
+    width: 3% !important;
+}
+
+#syncHistory .sync-history-media-apps {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow: visible;
+}
+
+#syncHistory .sync-history-toggle,
+.sync-history-toggle {
+    display: inline-block;
+    cursor: pointer;
+}
+
+#syncHistory .sync-history-toggle i,
+.sync-history-toggle i {
+    pointer-events: none;
+}
+
+#syncHistory .sync-history-list,
+.sync-history-list {
+    margin-top: 0.35rem;
+    white-space: normal;
+}
+
+#syncHistory .sync-history-users {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+#syncHistory .sync-history-trigger {
+    width: 7% !important;
+}
+
+#syncHistory .sync-history-mode {
+    width: 15% !important;
+}
+
+#syncHistory .sync-history-status {
+    width: 7% !important;
+}
+
+#syncHistory .sync-history-size {
+    width: 7% !important;
+}
+
+.modal-backdrop {
+    --bs-backdrop-opacity: 1;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.modal-xxl {
+    --bs-modal-width: 90%;
+    max-width: 90%;
+    width: 90%;
+}
+
+.overlay-modal .modal-content {
+    border: 0;
+    border-radius: 0.75rem;
+    box-shadow: none;
+    background: var(--bs-body-bg);
+}
+
+.overlay-modal .modal-header,
+.overlay-modal .modal-footer {
+    border: 0;
+    background: transparent;
+}
+
+.overlay-modal .modal-header {
+    padding-bottom: 0.5rem;
+}
+
+.overlay-modal .modal-footer {
+    padding-top: 0;
+}
+
+.overlay-loading .modal-dialog {
+    max-width: 16rem;
+}
+
+.overlay-loading .modal-content {
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    text-align: center;
+}
+
+.overlay-loading .btn-close {
+    display: none;
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+}
+
+.overlay-loading .spinner-border {
+    width: 2.5rem;
+    height: 2.5rem;
+}
+
+.overlay-loading-text {
+    margin-top: 0.85rem;
+}

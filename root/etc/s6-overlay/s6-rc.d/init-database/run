@@ -1,0 +1,36 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+INIT_DB_LOG=/config/logs/system/init-database.log
+mkdir -p "$(dirname "$INIT_DB_LOG")"
+if [[ -w /proc/1/fd/1 ]]; then
+    exec >/proc/1/fd/1 2>&1
+fi
+
+log_init_db() {
+    printf '%s\n' "$1" | tee -a "$INIT_DB_LOG"
+}
+
+if [[ -f /run/mysqld/mysqld.pid ]]; then
+    rm -f /run/mysqld/mysqld.pid
+fi
+
+if [ ! -f "/config/.created-db" ]; then
+    log_init_db "**** installing database, this might take a minute or two ****"
+    mariadb-install-db --user=abc --datadir=/config/database/mysql &>/dev/null
+    touch /config/.created-db
+fi
+
+log_init_db "**** running database ****"
+mkdir -p /run/mysqld && chown abc:abc /run/mysqld
+s6-setuidgid abc \
+    /usr/bin/mariadbd-safe \
+    --datadir=/config/database/mysql \
+    --pid-file=/run/mysqld/mysqld.pid \
+    --skip-networking=OFF \
+    --user=abc >/dev/null 2>&1 &
+
+log_init_db "waiting for mysqld, this takes a few seconds.."
+while ! mariadb-admin ping --silent; do
+    sleep 5
+done

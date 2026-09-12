@@ -1,0 +1,9 @@
+{
+  "name": "notifiarr/watchsync",
+  "type": "project",
+  "homepage": "https://github.com/Notifiarr/watchsync",
+  "license": "MIT",
+  "require": {
+    "php": "^8.4"
+  }
+}
