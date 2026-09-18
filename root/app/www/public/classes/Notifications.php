@@ -75,6 +75,9 @@ class Notifications
             }
 
             $lastResult = ['code' => 200];
+            if (!$linkIds) {
+                return ['code' => 200, 'skipped' => true, 'reason' => 'no links'];
+            }
             foreach ($linkIds as $linkRow) {
                 $platformId         = $linkRow['platform'];
                 $platformParameters = json_decode($linkRow['platform_parameters'], true);
@@ -89,6 +92,9 @@ class Notifications
                     case NotificationPlatforms::MATTERMOST:
                         $lastResult = $this->mattermost($platformParameters['url'] ?? '', $payload, $test, $platformParameters['username'] ?? '');
                         break;
+                }
+                if (!empty($lastResult['error'])) {
+                    return $lastResult;
                 }
             }
 

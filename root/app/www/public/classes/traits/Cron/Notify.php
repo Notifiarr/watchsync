@@ -123,12 +123,38 @@ trait Notify
         $this->sidecar['stats']['apps'][$name][$bucket][$action][] = $label;
     }
 
+    public function syncNotifyLog()
+    {
+        $log = strval($this->logfile ?? '');
+        if ($log != '') {
+            return $log;
+        }
+        $log = strval($this->sidecar['log_file'] ?? '');
+        if ($log != '') {
+            return $log;
+        }
+        $id = strval($this->sidecar['id'] ?? '');
+        if ($id != '' && $this->validJobId($id)) {
+            return CRON_LOGS_PATH . $id . '.log';
+        }
+
+        return CRON_SYNC_LOG;
+    }
+
     public function notifySync($trigger)
     {
         global $notifications, $mediaApps;
 
-        if (($this->sidecar['status'] ?? '') == 'finished' && !$this->syncHadChanges()) {
-            logger($this->logfile, 'nothing changed, notification skipped');
+        $log    = $this->syncNotifyLog();
+        $status = strval($this->sidecar['status'] ?? '');
+        $jobId  = strval($this->sidecar['id'] ?? '');
+        if ($status != 'finished' && $status != 'cancelled' && $status != 'error') {
+            logger($log, 'notification ' . $trigger . ' skipped: status=' . ($status != '' ? $status : 'empty') . ($jobId != '' ? ' id=' . $jobId : ''));
+            return;
+        }
+
+        if ($status == 'finished' && !$this->syncHadChanges()) {
+            logger($log, 'notification ' . $trigger . ' skipped: nothing changed' . ($jobId != '' ? ' id=' . $jobId : ''));
             return;
         }
 
@@ -174,7 +200,13 @@ trait Notify
         }
 
         $stats   = $job['stats'] ?? [];
+        $started = intval($job['started'] ?? 0);
         $ended   = intval($job['finished'] ?? 0) ?: time();
+        if ($started > 0 && $ended >= $started) {
+            $runtime = $ended > $started ? relativeBetweenDates($started, $ended, true) : '1s';
+        } else {
+            $runtime = '0s';
+        }
         $payload = [
             'event'     => $trigger,
             'id'        => $job['id'] ?? '',
@@ -183,8 +215,8 @@ trait Notify
             'mode'      => $mediaApps->getJobModeName($job),
             'libraries' => $libraryLabel,
             'users'     => $userLabel,
-            'status'    => $job['status'] ?? '',
-            'runtime'   => (!empty($job['started']) && $ended > intval($job['started'])) ? relativeBetweenDates(intval($job['started']), $ended, true) : '0s',
+            'status'    => $status,
+            'runtime'   => $runtime,
         ];
         if ($syncType == MediaSyncTypes::LIBRARY) {
             $payload['scan'] = $mediaApps->getLibraryScanName($job['scan'] ?? MediaLibraryScans::LAST_SCAN);
@@ -209,7 +241,17 @@ trait Notify
             ];
         }
 
-        $notifications->notify(0, $trigger, $payload);
+        logger($log, 'notification ' . $trigger . ' sending' . ($jobId != '' ? ' id=' . $jobId : '') . ' type=' . ($payload['type'] ?? '') . ' runtime=' . $runtime);
+        $result = $notifications->notify(0, $trigger, $payload);
+        if (!empty($result['skipped'])) {
+            logger($log, 'notification ' . $trigger . ' skipped: ' . strval($result['reason'] ?? 'no links'));
+            return;
+        }
+        if (!empty($result['error'])) {
+            logger($log, 'notification ' . $trigger . ' failed: ' . strval($result['error']));
+            return;
+        }
+        logger($log, 'notification ' . $trigger . ' sent');
     }
 
     public function syncEndMediaApps($stats, $appNames = [])

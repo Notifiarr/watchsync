@@ -66,11 +66,11 @@
             <a class="nav-link menu-link" href="#" data-page="library">
                 <i class="fa-solid fa-book"></i> <?= htmlEscape(translate('library')) ?>
             </a>
-            <a class="nav-link menu-link" href="#" data-page="notifications">
-                <i class="fa-solid fa-bell"></i> <?= htmlEscape(translate('notifications')) ?>
-            </a>
             <a class="nav-link menu-link" href="#" data-page="webhooks">
                 <i class="fa-solid fa-tower-broadcast"></i> <?= htmlEscape(translate('webhooks')) ?>
+            </a>
+            <a class="nav-link menu-link" href="#" data-page="notifications">
+                <i class="fa-solid fa-bell"></i> <?= htmlEscape(translate('notifications')) ?>
             </a>
             <a class="nav-link menu-link" href="#" data-page="logs">
                 <i class="fa-solid fa-file-lines"></i> <?= htmlEscape(translate('logs')) ?>
@@ -111,11 +111,11 @@
                 <a class="nav-link menu-link" href="#" data-page="library">
                     <i class="fa-solid fa-book"></i> <?= htmlEscape(translate('library')) ?>
                 </a>
-                <a class="nav-link menu-link" href="#" data-page="notifications">
-                    <i class="fa-solid fa-bell"></i> <?= htmlEscape(translate('notifications')) ?>
-                </a>
                 <a class="nav-link menu-link" href="#" data-page="webhooks">
                     <i class="fa-solid fa-tower-broadcast"></i> <?= htmlEscape(translate('webhooks')) ?>
+                </a>
+                <a class="nav-link menu-link" href="#" data-page="notifications">
+                    <i class="fa-solid fa-bell"></i> <?= htmlEscape(translate('notifications')) ?>
                 </a>
                 <a class="nav-link menu-link" href="#" data-page="logs">
                     <i class="fa-solid fa-file-lines"></i> <?= htmlEscape(translate('logs')) ?>

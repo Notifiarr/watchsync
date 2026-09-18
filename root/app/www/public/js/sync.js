@@ -93,6 +93,57 @@ function formatSyncCountdown(seconds)
     return parts.join(' ');
 }
 // ---------------------------------------------------------------------------------------------
+var syncAutomaticRefreshPending = {};
+var syncAutomaticRefreshTimers = {};
+function refreshSyncAutomaticCountdown($el)
+{
+    let key = $el.attr('data-key') || '';
+    if (!key || syncAutomaticRefreshPending[key]) {
+        return;
+    }
+    syncAutomaticRefreshPending[key] = true;
+    $.ajax({
+        url: BASE_URL + 'ajax/sync.php',
+        type: 'post',
+        dataType: 'json',
+        data: '&event=automaticNext&key=' + encodeURIComponent(key),
+        complete: function () {
+            syncAutomaticRefreshPending[key] = false;
+        },
+        success: function (response) {
+            if (!response || response.error || !$el.closest('body').length) {
+                return;
+            }
+            setSyncAutomaticCountdown($el, !!response.enabled, response.next_at, response.until);
+            let nextAt = parseInt(response.next_at, 10) || 0;
+            let now = Math.floor(Date.now() / 1000);
+            if (response.enabled && nextAt && nextAt <= now) {
+                if (syncAutomaticRefreshTimers[key]) {
+                    clearTimeout(syncAutomaticRefreshTimers[key]);
+                }
+                syncAutomaticRefreshTimers[key] = setTimeout(function () {
+                    delete syncAutomaticRefreshTimers[key];
+                    refreshSyncAutomaticCountdown($el);
+                }, 5000);
+            } else if (syncAutomaticRefreshTimers[key]) {
+                clearTimeout(syncAutomaticRefreshTimers[key]);
+                delete syncAutomaticRefreshTimers[key];
+            }
+        }
+    });
+}
+// ---------------------------------------------------------------------------------------------
+function refreshAllSyncAutomaticCountdowns()
+{
+    $('.sync-automatic').each(function () {
+        let $el = $(this);
+        if (!(parseInt($el.attr('data-next-at'), 10) || 0) && !$el.find('.sync-automatic-next').text()) {
+            return;
+        }
+        refreshSyncAutomaticCountdown($el);
+    });
+}
+// ---------------------------------------------------------------------------------------------
 function updateSyncAutomaticCountdowns()
 {
     let now = Math.floor(Date.now() / 1000);
@@ -104,7 +155,16 @@ function updateSyncAutomaticCountdowns()
             next.text('');
             return;
         }
-        next.text(translate('automationNextCountdown', [formatSyncCountdown(nextAt - now)]));
+        let remain = nextAt - now;
+        if (remain <= 0) {
+            let key = $el.attr('data-key') || '';
+            next.text(translate('automationNextCountdown', [formatSyncCountdown(0)]));
+            if (key && !syncAutomaticRefreshPending[key] && !syncAutomaticRefreshTimers[key]) {
+                refreshSyncAutomaticCountdown($el);
+            }
+            return;
+        }
+        next.text(translate('automationNextCountdown', [formatSyncCountdown(remain)]));
     });
 }
 // ---------------------------------------------------------------------------------------------

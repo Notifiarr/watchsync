@@ -9,6 +9,8 @@
 
 trait Jobs
 {
+    protected $jobLockHandle = null;
+
     public function jobs()
     {
         $jobs = [];
@@ -778,9 +780,14 @@ trait Jobs
             $job['scan'] = intval($scan) ?: MediaLibraryScans::LAST_SCAN;
         }
 
-        $this->sidecar = $job;
-        $this->logfile = '';
-        if (!$this->writeJobHeader()) {
+        $previousSidecar = $this->sidecar;
+        $previousLogfile = $this->logfile;
+        $this->sidecar   = $job;
+        $this->logfile   = '';
+        $saved           = $this->writeJobHeader();
+        $this->sidecar   = $previousSidecar;
+        $this->logfile   = $previousLogfile;
+        if (!$saved) {
             return [];
         }
 
@@ -850,6 +857,7 @@ trait Jobs
             return [];
         }
 
+        $this->sidecar                  = $job;
         $this->sidecar['webhook_event'] = strval($event);
         $this->sidecar['webhook_item']  = [
             'type'         => strval($type),
@@ -918,7 +926,12 @@ trait Jobs
 
     public function startQueuedJob($job)
     {
-        if (!$job || empty($job['id']) || !$this->acquireLock($job['id'])) {
+        if (!$job || empty($job['id'])) {
+            return false;
+        }
+
+        $running = $this->runningJob($this->jobLockType($job));
+        if ($running && ($running['id'] ?? '') != $job['id']) {
             return false;
         }
 
@@ -934,6 +947,7 @@ trait Jobs
         $this->sidecar             = $job;
         $this->sidecar['status']   = 'running';
         $this->sidecar['started']  = time();
+        $this->sidecar['finished'] = 0;
         $this->sidecar['log_file'] = CRON_LOGS_PATH . $job['id'] . '.log';
         unset($this->sidecar['runtime'], $this->sidecar['size'], $this->sidecar['queued_wait']);
         $this->logfile = $this->sidecar['log_file'];
@@ -1404,10 +1418,10 @@ trait Jobs
         $logFile  = $payload['log_file'] ?? $this->logfile ?? '';
         $stats    = $payload['stats'] ?? [];
         $results  = [];
-        if (!in_array($status, ['queued', 'running'], true)) {
+        if (!in_array($status, ['queued', 'running'])) {
             $ended   = $finished ?: time();
             $results = [
-                'runtime'   => ($started && $ended > $started) ? relativeBetweenDates($started, $ended, true) : '0s',
+                'runtime'   => ($started && $ended >= $started) ? ($ended > $started ? relativeBetweenDates($started, $ended, true) : '1s') : '0s',
                 'added'     => intval($stats['added'] ?? 0),
                 'updated'   => intval($stats['updated'] ?? 0),
                 'unchanged' => intval($stats['unchanged'] ?? 0),
@@ -1440,18 +1454,47 @@ trait Jobs
             return false;
         }
 
+        $path = $this->lockFile($job);
+        if ($path == '') {
+            return false;
+        }
+        if (!is_dir(CRON_LOGS_PATH)) {
+            mkdir(CRON_LOGS_PATH, 0755, true);
+        }
+
+        $fp = fopen($path, 'c+');
+        if (!$fp || !flock($fp, LOCK_EX | LOCK_NB)) {
+            if ($fp) {
+                fclose($fp);
+            }
+            return false;
+        }
+
+        ftruncate($fp, 0);
+        rewind($fp);
+        fwrite($fp, strval($jobId));
+        fflush($fp);
+        $this->jobLockHandle = $fp;
+
         return true;
     }
 
     public function releaseLock($jobId = '')
     {
-        $id   = $jobId ?: ($this->sidecar['id'] ?? '');
+        $id = $jobId ?: ($this->sidecar['id'] ?? '');
+        if ($this->jobLockHandle) {
+            flock($this->jobLockHandle, LOCK_UN);
+            fclose($this->jobLockHandle);
+            $this->jobLockHandle = null;
+        }
+
         $job  = ($id && ($this->sidecar['id'] ?? '') == $id) ? $this->sidecar : ($id ? $this->job($id) : $this->sidecar);
         $lock = $this->lockFile($job);
         if (!$lock || !is_file($lock)) {
             return;
         }
-        if ($id && trim(file_get_contents($lock)) != $id) {
+        $holder = trim(strval(file_get_contents($lock)));
+        if ($id != '' && $holder != '' && $holder != $id) {
             return;
         }
 

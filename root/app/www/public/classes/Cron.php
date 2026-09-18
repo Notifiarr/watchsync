@@ -90,6 +90,11 @@ class Cron
             logger($log, 'dry_run=' . (!empty($this->sidecar['dry_run']) ? '1' : '0'));
 
             if (!$this->acquireLock($this->sidecar['id'])) {
+                $running = $this->runningJob($this->jobLockType($this->sidecar));
+                if (($running['id'] ?? '') == ($this->sidecar['id'] ?? '')) {
+                    logger($log, 'lock active same job');
+                    return;
+                }
                 if (($this->sidecar['status'] ?? '') == 'running') {
                     $this->sidecar['status']  = 'queued';
                     $this->sidecar['started'] = 0;
@@ -151,12 +156,13 @@ class Cron
             $this->writeJobHeader();
             if (($this->sidecar['status'] ?? '') == 'finished') {
                 $this->setSyncLastFinished($this->jobLockType($this->sidecar), intval($this->sidecar['finished']));
-                if (intval($this->sidecar['sync_type'] ?? 0) == MediaSyncTypes::LIBRARY) {
-                    $this->queueHistoryAfterLibraryFinish();
-                }
             }
-            $this->notifySync('syncOverview');
+            $notifyTrigger = intval($this->sidecar['trigger'] ?? 0) == MediaSyncTriggers::WEBHOOK ? 'syncWebhook' : 'syncOverview';
+            $this->notifySync($notifyTrigger);
             $type = $this->jobLockType($this->sidecar);
+            if (($this->sidecar['status'] ?? '') == 'finished' && intval($this->sidecar['sync_type'] ?? 0) == MediaSyncTypes::LIBRARY) {
+                $this->queueHistoryAfterLibraryFinish();
+            }
         } finally {
             logger($log, 'sync <-');
             loggerFlush($log);

@@ -31,7 +31,7 @@ if (IS_GUEST) {
 switch ($_POST['event'] ?? '') {
     case 'toggleAutomatic':
         $key = strval($_POST['key'] ?? '');
-        if (!in_array($key, ['parity', 'library', 'history'], true)) {
+        if (!in_array($key, ['parity', 'library', 'history'])) {
             echo json_encode(['error' => true, 'message' => translate('couldNotSaveSettings')]);
             exit;
         }
@@ -46,6 +46,23 @@ switch ($_POST['event'] ?? '') {
             'until'   => $next['until'] ?? '',
             'next_at' => intval($next['next_at'] ?? 0),
             'message' => translate('saved'),
+        ]);
+        exit;
+
+    case 'automaticNext':
+        $key = strval($_POST['key'] ?? '');
+        if (!in_array($key, ['parity', 'library', 'history'])) {
+            echo json_encode(['error' => true, 'message' => translate('couldNotSaveSettings')]);
+            exit;
+        }
+        $next = $cron->automaticNextRun($key);
+        echo json_encode([
+            'error'   => false,
+            'enabled' => !empty($next['enabled']),
+            'title'   => $next['title'] ?? '',
+            'label'   => $next['label'] ?? '',
+            'until'   => $next['until'] ?? '',
+            'next_at' => intval($next['next_at'] ?? 0),
         ]);
         exit;
 

@@ -189,6 +189,9 @@ function initializeSSE(logId)
                 if ($('#syncHistory').length && typeof refreshSyncHistory == 'function') {
                     refreshSyncHistory();
                 }
+                if ($('.sync-automatic').length && typeof refreshAllSyncAutomaticCountdowns == 'function') {
+                    refreshAllSyncAutomaticCountdowns();
+                }
             }
         }
 
@@ -198,6 +201,9 @@ function initializeSSE(logId)
 
         if (sseLogId && payload.status && payload.status != 'running') {
             initializeSSE();
+            if ($('.sync-automatic').length && typeof refreshAllSyncAutomaticCountdowns == 'function') {
+                refreshAllSyncAutomaticCountdowns();
+            }
         }
     };
 
