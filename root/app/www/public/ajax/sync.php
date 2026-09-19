@@ -476,26 +476,26 @@ switch ($_POST['event'] ?? '') {
         $end      = intval($chunk['end'] ?? (intval($chunk['before']) + count($chunk['lines'])));
         $tailAttr = !empty($chunk['tail']) ? ' data-tail="1"' : '';
         ?>
-                                                        <template id="syncLogFindTemplate">
-                                                            <div class="sync-log-find">
-                                                                <div class="input-group input-group-sm sync-log-find-input">
-                                                                    <input type="text" class="form-control" id="syncLogFind" data-id="<?= htmlEscape($job['id']) ?>" placeholder="<?= htmlEscape(translate('find')) ?>" autocomplete="off" spellcheck="false">
-                                                                    <button type="button" class="btn btn-outline-secondary" id="syncLogFindClear" title="<?= htmlEscape(translate('clear')) ?>"><i class="fa-solid fa-xmark"></i></button>
-                                                                    <button type="button" class="btn btn-outline-secondary" id="syncLogFindSearch" title="<?= htmlEscape(translate('find')) ?>"><i class="fa-solid fa-magnifying-glass"></i></button>
+                                                                <template id="syncLogFindTemplate">
+                                                                    <div class="sync-log-find">
+                                                                        <div class="input-group input-group-sm sync-log-find-input">
+                                                                            <input type="text" class="form-control" id="syncLogFind" data-id="<?= htmlEscape($job['id']) ?>" placeholder="<?= htmlEscape(translate('find')) ?>" autocomplete="off" spellcheck="false">
+                                                                            <button type="button" class="btn btn-outline-secondary" id="syncLogFindClear" title="<?= htmlEscape(translate('clear')) ?>"><i class="fa-solid fa-xmark"></i></button>
+                                                                            <button type="button" class="btn btn-outline-secondary" id="syncLogFindSearch" title="<?= htmlEscape(translate('find')) ?>"><i class="fa-solid fa-magnifying-glass"></i></button>
+                                                                        </div>
+                                                                        <span class="small text-nowrap fw-semibold" id="syncLogFindCount"></span>
+                                                                    </div>
+                                                                </template>
+                                                                <div class="sync-log-split" id="syncLogSplit">
+                                                                    <div class="sync-log-pane sync-log-pane-main" id="syncLogMainPane">
+                                                                        <pre class="mb-0 small sync-log-lines" id="syncLogLines" style="white-space: pre-wrap;" data-id="<?= htmlEscape($job['id']) ?>" data-status="<?= htmlEscape($job['status']) ?>" data-offset="<?= intval($offset) ?>" data-before="<?= intval($chunk['before']) ?>" data-end="<?= $end ?>"<?= !empty($chunk['done']) ? ' data-done="1"' : '' ?><?= $tailAttr ?>><?= $html ?></pre>
+                                                                    </div>
+                                                                    <div class="sync-log-pane sync-log-pane-matches d-none" id="syncLogMatchesPane">
+                                                                        <pre class="mb-0 small sync-log-lines" id="syncLogMatches" style="white-space: pre-wrap;"></pre>
+                                                                    </div>
                                                                 </div>
-                                                                <span class="small text-nowrap fw-semibold" id="syncLogFindCount"></span>
-                                                            </div>
-                                                        </template>
-                                                        <div class="sync-log-split" id="syncLogSplit">
-                                                            <div class="sync-log-pane sync-log-pane-main" id="syncLogMainPane">
-                                                                <pre class="mb-0 small sync-log-lines" id="syncLogLines" style="white-space: pre-wrap;" data-id="<?= htmlEscape($job['id']) ?>" data-status="<?= htmlEscape($job['status']) ?>" data-offset="<?= intval($offset) ?>" data-before="<?= intval($chunk['before']) ?>" data-end="<?= $end ?>"<?= !empty($chunk['done']) ? ' data-done="1"' : '' ?><?= $tailAttr ?>><?= $html ?></pre>
-                                                            </div>
-                                                            <div class="sync-log-pane sync-log-pane-matches d-none" id="syncLogMatchesPane">
-                                                                <pre class="mb-0 small sync-log-lines" id="syncLogMatches" style="white-space: pre-wrap;"></pre>
-                                                            </div>
-                                                        </div>
-                                                        <?php
-                                                        exit;
+                                                                <?php
+                                                                exit;
 
     case 'logSearch':
         $id    = $_POST['id'] ?? '';

@@ -938,7 +938,7 @@ trait Emby
         $body = [];
         foreach ($policy as $key => $value) {
             $name = $key == '' ? $key : strtoupper($key[0]) . substr($key, 1);
-            if ($name == 'EnableAllFolders' || $name == 'EnabledFolders' || $name == 'BlockedMediaFolders' || $name == 'ExcludedSubFolders') {
+            if (str_equals_any($name, ['EnableAllFolders', 'EnabledFolders', 'BlockedMediaFolders', 'ExcludedSubFolders'])) {
                 continue;
             }
             $body[$name] = $value;

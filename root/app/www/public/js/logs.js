@@ -1,3 +1,14 @@
+function setLogHeader(header)
+{
+    $('#logHeader').empty();
+    if (!header) {
+        return;
+    }
+
+    $('#logHeader').append(document.createTextNode(header + ' '));
+    $('#logHeader').append($('<i class="fas fa-copy text-primary" style="cursor: pointer;" title="' + translate('copy') + '" onclick="clipboard(\'logViewer\', \'log\');"></i>'));
+}
+// ---------------------------------------------------------------------------------------------
 function viewLog(name, hash)
 {
     pageLoadingStart();
@@ -5,7 +16,7 @@ function viewLog(name, hash)
     $('[id^=logList-]').removeClass('text-warning').addClass('text-secondary');
     $('#logList-' + hash).removeClass('text-secondary').addClass('text-warning');
     $('#logViewer').text(translate('fetchingLog'));
-    $('#logHeader').text('');
+    setLogHeader('');
 
     $.ajax({
         url: BASE_URL + 'ajax/logs.php',
@@ -15,17 +26,17 @@ function viewLog(name, hash)
         success: function (response) {
             pageLoadingStop();
             if (!response || response.error) {
-                $('#logHeader').text('');
+                setLogHeader('');
                 $('#logViewer').text((response && response.message) || translate('couldNotLoadLog'));
                 return;
             }
-            $('#logHeader').text(response.header || '');
+            setLogHeader(response.header || '');
             $('#logViewer').html(response.log || '');
             $('#logViewer').scrollTop($('#logViewer')[0].scrollHeight);
         },
         error: function () {
             pageLoadingStop();
-            $('#logHeader').text('');
+            setLogHeader('');
             $('#logViewer').text(translate('couldNotLoadLog'));
         }
     });

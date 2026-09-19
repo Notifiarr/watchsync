@@ -146,7 +146,7 @@ function webhookNamesApp($slug, $agent, $post)
             }
             foreach (webhookGuidValues($post) as $guid) {
                 $guid = strtolower($guid);
-                if (str_contains($guid, 'plex://') || str_contains($guid, 'com.plexapp')) {
+                if (str_contains_any($guid, ['plex://', 'com.plexapp'])) {
                     return true;
                 }
             }

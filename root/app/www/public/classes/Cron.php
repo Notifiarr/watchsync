@@ -88,6 +88,16 @@ class Cron
             }
             logger($log, 'trigger=' . $triggerName);
             logger($log, 'dry_run=' . (!empty($this->sidecar['dry_run']) ? '1' : '0'));
+            $historyLibraries = [];
+            foreach ($this->sidecar['history_libraries'] ?? [] as $library) {
+                $key = strval($library['key'] ?? '');
+                if ($key != '') {
+                    $historyLibraries[] = $key;
+                }
+            }
+            if ($historyLibraries) {
+                logger($log, 'libraries=' . implode(',', $historyLibraries));
+            }
 
             if (!$this->acquireLock($this->sidecar['id'])) {
                 $running = $this->runningJob($this->jobLockType($this->sidecar));
@@ -154,7 +164,7 @@ class Cron
             $this->sidecar['finished'] = time();
             $persist                   = true;
             $this->writeJobHeader();
-            if (($this->sidecar['status'] ?? '') == 'finished') {
+            if (($this->sidecar['status'] ?? '') == 'finished' && $this->shouldUpdateSyncSchedule($this->sidecar)) {
                 $this->setSyncLastFinished($this->jobLockType($this->sidecar), intval($this->sidecar['finished']));
             }
             $notifyTrigger = intval($this->sidecar['trigger'] ?? 0) == MediaSyncTriggers::WEBHOOK ? 'syncWebhook' : 'syncOverview';

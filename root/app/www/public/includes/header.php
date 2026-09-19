@@ -20,6 +20,7 @@
     <link href="libraries/bootstrap/css/bootstrap.min.css?t=<?= filemtime(RELATIVE_PATH . 'libraries/bootstrap/css/bootstrap.min.css') ?>" rel="stylesheet" />
     <link href="libraries/jquery/css/jquery-ui.min.css?t=<?= filemtime(RELATIVE_PATH . 'libraries/jquery/css/jquery-ui.min.css') ?>" rel="stylesheet" />
     <link href="libraries/fontawesome/css/all.min.css?t=<?= filemtime(RELATIVE_PATH . 'libraries/fontawesome/css/all.min.css') ?>" rel="stylesheet" />
+    <link href="libraries/datatable/datatables.min.css?t=<?= filemtime(RELATIVE_PATH . 'libraries/datatable/datatables.min.css') ?>" rel="stylesheet" />
     <link href="css/styles.css?t=<?= filemtime(RELATIVE_PATH . 'css/styles.css') ?>" rel="stylesheet" />
     <script type="text/javascript">
         (function () {

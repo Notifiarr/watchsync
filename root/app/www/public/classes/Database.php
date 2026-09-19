@@ -69,7 +69,7 @@ class Database
                 } catch (Exception $retry) {
                     logger(SYSTEM_LOG, 'MYSQL: Failed to connect to \'' . DB_USER . '@' . DB_HOST . '\': ' . $retry->getMessage());
                 }
-            } else if (str_contains($message, 'No such file or directory') || str_contains($message, 'Connection refused')) {
+            } else if (str_contains_any($message, ['No such file or directory', 'Connection refused'])) {
                 logger(SYSTEM_LOG, 'MYSQL: Connecting to \'' . DB_USER . '@127.0.0.1\'...');
                 try {
                     $this->db   = $this->mysqliConnect('127.0.0.1', DB_USER, DB_PASSWORD, '');

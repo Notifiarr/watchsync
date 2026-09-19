@@ -150,19 +150,19 @@ try {
         case 'backupRunningRow':
             ob_start();
             ?>
-                                                            <tr class="backup-running-row">
-                                                                <td><?= htmlEscape(date('m/d/Y')) ?></td>
-                                                                <td><?= htmlEscape(date('g:i:s A')) ?></td>
-                                                                <td><?= htmlEscape(translate('manual')) ?></td>
-                                                                <td></td>
-                                                                <td class="backup-actions"><i class="fas fa-spinner fa-spin me-1"></i><?= htmlEscape(translate('running')) ?></td>
-                                                            </tr>
-                                                            <?php
-                                                            $result = [
-                                                                'error' => false,
-                                                                'html'  => ob_get_clean(),
-                                                            ];
-                                                            break;
+                                                                        <tr class="backup-running-row">
+                                                                            <td><?= htmlEscape(date('m/d/Y')) ?></td>
+                                                                            <td><?= htmlEscape(date('g:i:s A')) ?></td>
+                                                                            <td><?= htmlEscape(translate('manual')) ?></td>
+                                                                            <td></td>
+                                                                            <td class="backup-actions"><i class="fas fa-spinner fa-spin me-1"></i><?= htmlEscape(translate('running')) ?></td>
+                                                                        </tr>
+                                                                        <?php
+                                                                        $result = [
+                                                                            'error' => false,
+                                                                            'html'  => ob_get_clean(),
+                                                                        ];
+                                                                        break;
         case 'listBackups':
             ob_start();
             require RELATIVE_PATH . 'pages/settings/backupList.php';

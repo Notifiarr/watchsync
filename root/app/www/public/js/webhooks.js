@@ -1,8 +1,18 @@
 $(document).on('page:loaded', function (event, pageKey) {
     if (pageKey == 'webhooks') {
         updateWebhookUrl();
+        initWebhookLogTable();
     }
 });
+// ---------------------------------------------------------------------------------------------
+function initWebhookLogTable()
+{
+    initDataTable('#webhook-log-table', {
+        language: {
+            emptyTable: translate('noWebhookLogs')
+        }
+    });
+}
 // ---------------------------------------------------------------------------------------------
 function viewWebhookLog(name)
 {
@@ -54,18 +64,6 @@ function updateWebhookUrl()
 {
     var key = $('#webhookApiKey').val() || '';
     $('#webhookUrl').val(webhookPageUrl() + 'api/?apikey=' + encodeURIComponent(key));
-}
-// ---------------------------------------------------------------------------------------------
-function copyWebhookUrl()
-{
-    var url = $('#webhookUrl').val() || '';
-    if (!url || !navigator.clipboard) {
-        return;
-    }
-
-    navigator.clipboard.writeText(url).then(function () {
-        toast(translate('webhooks'), translate('copied'), 'success');
-    });
 }
 // ---------------------------------------------------------------------------------------------
 function generateWebhookApiKey()

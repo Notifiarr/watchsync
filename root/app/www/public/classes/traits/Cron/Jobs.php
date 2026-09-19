@@ -467,7 +467,7 @@ trait Jobs
             return ['error' => true, 'message' => translate('pageNotFound')];
         }
 
-        if (($job['status'] ?? '') == 'running' || ($job['status'] ?? '') == 'queued' || !intval($job['finished'] ?? 0)) {
+        if (str_equals_any($job['status'] ?? '', ['running', 'queued']) || !intval($job['finished'] ?? 0)) {
             $this->sidecar             = $job;
             $this->sidecar['status']   = 'cancelled';
             $this->sidecar['finished'] = intval($job['finished'] ?? 0) ?: time();
@@ -489,7 +489,7 @@ trait Jobs
             return ['error' => true, 'message' => translate('pageNotFound')];
         }
 
-        if (($job['status'] ?? '') == 'running' || ($job['status'] ?? '') == 'queued') {
+        if (str_equals_any($job['status'] ?? '', ['running', 'queued'])) {
             $this->cancel($id);
         }
 
@@ -515,7 +515,7 @@ trait Jobs
         }
 
         $status = $job['status'] ?? '';
-        if ($status == 'running' || $status == 'queued') {
+        if (str_equals_any($status, ['running', 'queued'])) {
             return ['error' => true, 'message' => translate('syncAlreadyRunning')];
         }
 
@@ -557,7 +557,7 @@ trait Jobs
             }
 
             $status = $job['status'] ?? '';
-            if ($status == 'running' || $status == 'queued') {
+            if (str_equals_any($status, ['running', 'queued'])) {
                 $this->cancel($job['id']);
             }
 
@@ -689,7 +689,7 @@ trait Jobs
         }
     }
 
-    public function createJob($mediaAppId, $userIds, $syncMode, $syncType, $libraries = [], $syncAccounts = 0, $trigger = MediaSyncTriggers::MANUAL, $scan = 0, $dryRun = 0)
+    public function createJob($mediaAppId, $userIds, $syncMode, $syncType, $libraries = [], $syncAccounts = 0, $trigger = MediaSyncTriggers::MANUAL, $scan = 0, $dryRun = 0, $extra = [])
     {
         if (intval($syncType) == MediaSyncTypes::HISTORY && !$this->hasLibraryData()) {
             return [];
@@ -778,6 +778,14 @@ trait Jobs
         ];
         if ($syncType == MediaSyncTypes::LIBRARY) {
             $job['scan'] = intval($scan) ?: MediaLibraryScans::LAST_SCAN;
+        }
+        if (is_array($extra)) {
+            foreach ($extra as $key => $value) {
+                if ($key == '' || array_key_exists($key, $job)) {
+                    continue;
+                }
+                $job[$key] = $value;
+            }
         }
 
         $previousSidecar = $this->sidecar;
@@ -1304,19 +1312,45 @@ trait Jobs
         }
     }
 
+    public function shouldUpdateSyncSchedule($job)
+    {
+        if (intval($job['trigger'] ?? 0) != MediaSyncTriggers::AUTOMATIC) {
+            return false;
+        }
+        if (!empty($job['follow_up'])) {
+            return false;
+        }
+
+        return true;
+    }
+
     public function queueHistoryAfterLibraryFinish()
     {
         global $mediaApps;
 
+        $log = $this->logfile ?: ($this->sidecar['log_file'] ?? CRON_SYNC_LOG);
         if (!$this->database->settingEnabled('syncHistoryNewLibraries')) {
             return false;
         }
+        $libraries = array_values($this->sidecar['history_libraries'] ?? []);
+        if (!$libraries) {
+            logger($log, 'no new libraries found, skipping auto history sync');
+            return false;
+        }
+
+        $ids = [];
+        foreach ($libraries as $library) {
+            $ids[] = strval($library['key'] ?? '');
+        }
+        $ids = array_values(array_filter($ids, fn($id) => $id != ''));
+        logger($log, count($libraries) . ' new libraries found, queuing history sync for libraries: ' . implode(', ', $ids));
 
         $master = $mediaApps->masterMediaApp();
         if (!$master) {
             return false;
         }
         if ($this->runningJob('history') || $this->nextQueuedJob('history')) {
+            logger($log, 'history follow-up skipped: history already queued or running');
             return false;
         }
 
@@ -1328,7 +1362,15 @@ trait Jobs
             return false;
         }
 
-        return $this->createJob(0, $userIds, intval($master['sync_mode'] ?: MediaSyncModes::BOTH), MediaSyncTypes::HISTORY, [], 0, MediaSyncTriggers::AUTOMATIC) ? true : false;
+        $job = $this->createJob(0, $userIds, intval($master['sync_mode'] ?: MediaSyncModes::BOTH), MediaSyncTypes::HISTORY, [], 0, MediaSyncTriggers::AUTOMATIC, 0, 0, [
+            'follow_up'         => 1,
+            'history_libraries' => $libraries,
+        ]);
+        if (!$job) {
+            return false;
+        }
+
+        return true;
     }
 
     public function processQueue()

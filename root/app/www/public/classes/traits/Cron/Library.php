@@ -239,12 +239,18 @@ trait Library
                         }
                     }
                 }
+                $addedBefore = $added['movies'] + $added['series'] + $added['episodes'];
                 $this->importLibraryItems($mediaApp, $platformName, [
                     'movies'   => $items['movies'] ?? [],
                     'series'   => $items['series'] ?? [],
                     'episodes' => $items['episodes'] ?? [],
                 ], $added, $updated, $unchanged);
-
+                if (($added['movies'] + $added['series'] + $added['episodes']) > $addedBefore && ($library['key'] ?? '') != '') {
+                    $this->sidecar['history_libraries'][intval($mediaApp['id']) . ':' . $library['key']] = [
+                        'media_app_id' => intval($mediaApp['id']),
+                        'key'          => strval($library['key']),
+                    ];
+                }
             }
 
             if (!$since && $seenIds && $this->scannedAllAppLibraries($mediaApp, $libraries)) {

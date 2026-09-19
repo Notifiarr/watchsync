@@ -58,21 +58,21 @@ while ($row = $database->fetchAssoc($res)) {
                     <label for="webhookUrl" class="form-label"><?= htmlEscape(translate('webhookUrl')) ?></label>
                     <div class="input-group">
                         <input type="text" class="form-control" id="webhookUrl" readonly>
-                        <button type="button" class="btn btn-outline-secondary" onclick="copyWebhookUrl();"><?= htmlEscape(translate('copy')) ?></button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="clipboard('webhookUrl', 'val');"><?= htmlEscape(translate('copy')) ?></button>
                     </div>
                     <div class="form-text"><?= htmlEscape(translate('webhookUrlDescription')) ?></div>
                 </div>
                 <div class="mb-3">
                     <div class="form-label"><?= htmlEscape(translate('webhookApps')) ?></div>
                     <?php if (!$apps) { ?>
-                                            <p class="text-body-secondary mb-0"><?= htmlEscape(translate('noMediaApps')) ?></p>
+                                                <p class="text-body-secondary mb-0"><?= htmlEscape(translate('noMediaApps')) ?></p>
                     <?php } else { ?>
-                                            <?php foreach ($apps as $mediaApp) { ?>
-                                                                    <div class="form-check form-switch mb-2">
-                                                                        <input class="form-check-input webhook-app" type="checkbox" role="switch" id="webhookApp-<?= intval($mediaApp['id']) ?>" value="<?= intval($mediaApp['id']) ?>"<?= !empty($mediaApp['webhooks']) ? ' checked' : '' ?>>
-                                                                        <label class="form-check-label" for="webhookApp-<?= intval($mediaApp['id']) ?>"><?= htmlEscape($mediaApp['name']) ?> (<?= htmlEscape($mediaApps->getPlatformName($mediaApp['platform'])) ?>)</label>
-                                                                    </div>
-                                            <?php } ?>
+                                                <?php foreach ($apps as $mediaApp) { ?>
+                                                                            <div class="form-check form-switch mb-2">
+                                                                                <input class="form-check-input webhook-app" type="checkbox" role="switch" id="webhookApp-<?= intval($mediaApp['id']) ?>" value="<?= intval($mediaApp['id']) ?>"<?= !empty($mediaApp['webhooks']) ? ' checked' : '' ?>>
+                                                                                <label class="form-check-label" for="webhookApp-<?= intval($mediaApp['id']) ?>"><?= htmlEscape($mediaApp['name']) ?> (<?= htmlEscape($mediaApps->getPlatformName($mediaApp['platform'])) ?>)</label>
+                                                                            </div>
+                                                <?php } ?>
                     <?php } ?>
                 </div>
                 <button type="button" class="btn btn-primary" onclick="saveWebhooks();"><?= htmlEscape(translate('save')) ?></button>
@@ -81,7 +81,7 @@ while ($row = $database->fetchAssoc($res)) {
     </div>
     <div class="col-12">
         <div class="table-responsive">
-            <table class="table table-bordered table-hover table-no-squish">
+            <table class="table table-bordered table-hover table-no-squish" id="webhook-log-table">
                 <colgroup>
                     <col style="width: 20%;">
                     <col style="width: 12%;">
@@ -97,32 +97,27 @@ while ($row = $database->fetchAssoc($res)) {
                         <th><?= htmlEscape(translate('type')) ?></th>
                         <th style="width: 20%;"><?= htmlEscape(translate('user')) ?></th>
                         <th style="width: 8%;"><?= htmlEscape(translate('code')) ?></th>
-                        <th class="text-center" style="width: 5%;">
+                        <th class="no-sort text-center" style="width: 5%;">
                             <i class="fas fa-trash text-danger" style="cursor: pointer;" title="<?= htmlEscape(translate('clearWebhookLogs')) ?>" onclick="deleteAllWebhookLogs()"></i>
                         </th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if (!$logs) { ?>
-                                            <tr>
-                                                <td colspan="6"><?= htmlEscape(translate('noWebhookLogs')) ?></td>
-                                            </tr>
-                    <?php } ?>
                     <?php foreach ($logs as $log) {
                         $path     = 'webhooks/' . $log['file'];
                         $username = webhookLogUsername($log, $webhookUsers);
                         $type     = webhookEventLabel($log['event']);
                         ?>
-                                            <tr style="cursor: pointer;" onclick="viewWebhookLog('<?= htmlEscape($path) ?>');">
-                                                <td style="width: 20%;"><?= htmlEscape($log['time'] ? date('Y-m-d g:i:s A', $log['time']) : '') ?></td>
-                                                <td style="width: 12%;"><?= $log['app'] != '' ? htmlEscape(translate($log['app'])) : '' ?></td>
-                                                <td><?= htmlEscape($type) ?></td>
-                                                <td style="width: 20%;"><?= htmlEscape($username) ?></td>
-                                                <td class="<?= intval($log['code'] ?? 0) >= 400 ? 'text-danger' : '' ?>" style="width: 8%;"><?= htmlEscape($log['code'] ?? '') ?></td>
-                                                <td class="text-center" style="width: 5%;" onclick="event.stopPropagation();">
-                                                    <i class="fas fa-trash text-danger" style="cursor: pointer;" title="<?= htmlEscape(translate('remove')) ?>" onclick="deleteWebhookLog('<?= htmlEscape($log['file']) ?>');"></i>
-                                                </td>
-                                            </tr>
+                                                <tr style="cursor: pointer;" onclick="viewWebhookLog('<?= htmlEscape($path) ?>');">
+                                                    <td style="width: 20%;"><?= htmlEscape($log['time'] ? date('Y-m-d g:i:s A', $log['time']) : '') ?></td>
+                                                    <td style="width: 12%;"><?= $log['app'] != '' ? htmlEscape(translate($log['app'])) : '' ?></td>
+                                                    <td><?= htmlEscape($type) ?></td>
+                                                    <td style="width: 20%;"><?= htmlEscape($username) ?></td>
+                                                    <td class="<?= intval($log['code'] ?? 0) >= 400 ? 'text-danger' : '' ?>" style="width: 8%;"><?= htmlEscape($log['code'] ?? '') ?></td>
+                                                    <td class="text-center" style="width: 5%;" onclick="event.stopPropagation();">
+                                                        <i class="fas fa-trash text-danger" style="cursor: pointer;" title="<?= htmlEscape(translate('remove')) ?>" onclick="deleteWebhookLog('<?= htmlEscape($log['file']) ?>');"></i>
+                                                    </td>
+                                                </tr>
                     <?php } ?>
                 </tbody>
             </table>

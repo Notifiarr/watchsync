@@ -788,12 +788,25 @@ function syncJobStarted(response, dialogId)
 // ---------------------------------------------------------------------------------------------
 function refreshSyncHistory()
 {
+    if ($.fn.dataTable && $.fn.dataTable.isDataTable('#sync-history-table')) {
+        $('#sync-history-table').DataTable().destroy();
+    }
     $.ajax({
         url: BASE_URL + 'ajax/sync.php',
         type: 'post',
         data: '&event=history',
         success: function (response) {
             $('#syncHistory').html(response);
+            initSyncHistoryTable();
+        }
+    });
+}
+// ---------------------------------------------------------------------------------------------
+function initSyncHistoryTable()
+{
+    initDataTable('#sync-history-table', {
+        language: {
+            emptyTable: translate('noSyncHistory')
         }
     });
 }
@@ -1147,11 +1160,14 @@ function loadSyncLogChunk()
 function mountSyncLogFind()
 {
     $('#sync-log-dialog .modal-header').addClass('sync-log-modal-header');
-    $('#sync-log-dialog .modal-header').find('.sync-log-find').remove();
+    $('#sync-log-dialog .modal-header').find('.sync-log-find, .sync-log-copy').remove();
+    $('#sync-log-dialog .modal-header').find('.modal-title').after(
+        $('<i class="fas fa-copy text-primary sync-log-copy" style="cursor: pointer;" title="' + translate('copy') + '" onclick="clipboard(\'syncLogLines\', \'log\');"></i>')
+    );
     if (!$('#sync-log-dialog #syncLogFindTemplate').length) {
         return;
     }
-    $('#sync-log-dialog .modal-header').find('.modal-title').after($('#sync-log-dialog #syncLogFindTemplate').html());
+    $('#sync-log-dialog .modal-header').find('.sync-log-copy').after($('#sync-log-dialog #syncLogFindTemplate').html());
 }
 // ---------------------------------------------------------------------------------------------
 function resetSyncLogFind()
@@ -1410,4 +1426,7 @@ $(document).on('click', '.sync-job-row', function (event) {
 // ---------------------------------------------------------------------------------------------
 $(document).on('page:loaded', function (event, pageKey) {
     closeSyncLogSource();
+    if (pageKey == 'sync') {
+        initSyncHistoryTable();
+    }
 });

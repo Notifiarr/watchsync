@@ -18,7 +18,7 @@ function isContainerLogGroup($group)
 {
     $group = strtolower(basename((string) $group));
 
-    return $group == 'nginx' || $group == 'php';
+    return str_equals_any($group, ['nginx', 'php']);
 }
 
 function isContainerLogFile($name)

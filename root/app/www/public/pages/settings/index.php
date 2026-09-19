@@ -82,12 +82,12 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                             <label for="backupTime" class="form-label"><?= htmlEscape(translate('backupTime')) ?></label>
                             <select class="form-select" id="backupTime" name="backupTime">
                                 <?php foreach (range(0, 23) as $hour) { ?>
-                                                <?php foreach ([0, 10, 20, 30, 40, 50] as $minute) {
-                                                    $option = sprintf('%02d:%02d', $hour, $minute);
-                                                    $label  = date('g:i A', mktime($hour, $minute, 0));
-                                                    ?>
-                                                                <option value="<?= htmlEscape($option) ?>"<?= $option == $backupTime ? ' selected' : '' ?>><?= htmlEscape($label) ?></option>
-                                                <?php } ?>
+                                                    <?php foreach ([0, 10, 20, 30, 40, 50] as $minute) {
+                                                        $option = sprintf('%02d:%02d', $hour, $minute);
+                                                        $label  = date('g:i A', mktime($hour, $minute, 0));
+                                                        ?>
+                                                                        <option value="<?= htmlEscape($option) ?>"<?= $option == $backupTime ? ' selected' : '' ?>><?= htmlEscape($label) ?></option>
+                                                    <?php } ?>
                                 <?php } ?>
                             </select>
                             <div class="form-text"><?= htmlEscape(translate('backupTimeDescription')) ?></div>
@@ -118,7 +118,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <label for="automaticParityHours" class="form-label mb-1"><?= htmlEscape(translate('intervalHours')) ?></label>
                                 <select class="form-select sync-interval-hours" id="automaticParityHours" data-minutes="#automaticParityMinutes">
                                     <?php foreach ($intervalHourOptions as $hour) { ?>
-                                            <option value="<?= $hour ?>"<?= intval($syncSettings['parityHours']) == $hour ? ' selected' : '' ?>><?= $hour ?></option>
+                                                <option value="<?= $hour ?>"<?= intval($syncSettings['parityHours']) == $hour ? ' selected' : '' ?>><?= $hour ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
@@ -126,7 +126,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <label for="automaticParityMinutes" class="form-label mb-1"><?= htmlEscape(translate('intervalMinutes')) ?></label>
                                 <select class="form-select sync-interval-minutes" id="automaticParityMinutes"<?= intval($syncSettings['parityHours']) >= 24 ? ' disabled' : '' ?>>
                                     <?php foreach ($intervalMinuteOptions as $minute) { ?>
-                                            <option value="<?= $minute ?>"<?= intval($syncSettings['parityMinutes']) == $minute ? ' selected' : '' ?>><?= $minute ?></option>
+                                                <option value="<?= $minute ?>"<?= intval($syncSettings['parityMinutes']) == $minute ? ' selected' : '' ?>><?= $minute ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
@@ -153,7 +153,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <label for="automaticLibraryHours" class="form-label mb-1"><?= htmlEscape(translate('intervalHours')) ?></label>
                                 <select class="form-select sync-interval-hours" id="automaticLibraryHours" data-minutes="#automaticLibraryMinutes">
                                     <?php foreach ($intervalHourOptions as $hour) { ?>
-                                            <option value="<?= $hour ?>"<?= intval($syncSettings['libraryHours']) == $hour ? ' selected' : '' ?>><?= $hour ?></option>
+                                                <option value="<?= $hour ?>"<?= intval($syncSettings['libraryHours']) == $hour ? ' selected' : '' ?>><?= $hour ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
@@ -161,7 +161,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <label for="automaticLibraryMinutes" class="form-label mb-1"><?= htmlEscape(translate('intervalMinutes')) ?></label>
                                 <select class="form-select sync-interval-minutes" id="automaticLibraryMinutes"<?= intval($syncSettings['libraryHours']) >= 24 ? ' disabled' : '' ?>>
                                     <?php foreach ($intervalMinuteOptions as $minute) { ?>
-                                            <option value="<?= $minute ?>"<?= intval($syncSettings['libraryMinutes']) == $minute ? ' selected' : '' ?>><?= $minute ?></option>
+                                                <option value="<?= $minute ?>"<?= intval($syncSettings['libraryMinutes']) == $minute ? ' selected' : '' ?>><?= $minute ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
@@ -183,7 +183,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <label for="automaticHistoryHours" class="form-label mb-1"><?= htmlEscape(translate('intervalHours')) ?></label>
                                 <select class="form-select sync-interval-hours" id="automaticHistoryHours" data-minutes="#automaticHistoryMinutes">
                                     <?php foreach ($intervalHourOptions as $hour) { ?>
-                                            <option value="<?= $hour ?>"<?= intval($syncSettings['historyHours']) == $hour ? ' selected' : '' ?>><?= $hour ?></option>
+                                                <option value="<?= $hour ?>"<?= intval($syncSettings['historyHours']) == $hour ? ' selected' : '' ?>><?= $hour ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
@@ -191,7 +191,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <label for="automaticHistoryMinutes" class="form-label mb-1"><?= htmlEscape(translate('intervalMinutes')) ?></label>
                                 <select class="form-select sync-interval-minutes" id="automaticHistoryMinutes"<?= intval($syncSettings['historyHours']) >= 24 ? ' disabled' : '' ?>>
                                     <?php foreach ($intervalMinuteOptions as $minute) { ?>
-                                            <option value="<?= $minute ?>"<?= intval($syncSettings['historyMinutes']) == $minute ? ' selected' : '' ?>><?= $minute ?></option>
+                                                <option value="<?= $minute ?>"<?= intval($syncSettings['historyMinutes']) == $minute ? ' selected' : '' ?>><?= $minute ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
@@ -253,9 +253,9 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                             <div class="mb-3">
                                 <div class="form-text"><?= htmlEscape(translate('loginCurrentConnection')) ?>: <span class="font-monospace"><?= htmlEscape($loginPeerIp != '' ? $loginPeerIp : translate('unknown')) ?></span>
                                     <?php if ($loginPeerAllowed) { ?>
-                                            <span class="text-success">(<?= htmlEscape(translate('loginPeerAllowed')) ?>)</span>
+                                                <span class="text-success">(<?= htmlEscape(translate('loginPeerAllowed')) ?>)</span>
                                     <?php } else { ?>
-                                            <span class="text-warning">(<?= htmlEscape(translate('loginPeerNotAllowed')) ?>)</span>
+                                                <span class="text-warning">(<?= htmlEscape(translate('loginPeerNotAllowed')) ?>)</span>
                                     <?php } ?>
                                 </div>
                             </div>

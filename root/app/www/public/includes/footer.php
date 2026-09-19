@@ -43,6 +43,7 @@
 <script src="libraries/kpopup/kpopup.js?t=<?= filemtime(RELATIVE_PATH . 'libraries/kpopup/kpopup.js') ?>"></script>
 <script src="libraries/jquery/js/jquery-ui.min.js?t=<?= filemtime(RELATIVE_PATH . 'libraries/jquery/js/jquery-ui.min.js') ?>"></script>
 <script src="libraries/bootstrap/js/bootstrap.bundle.min.js?t=<?= filemtime(RELATIVE_PATH . 'libraries/bootstrap/js/bootstrap.bundle.min.js') ?>"></script>
+<script src="libraries/datatable/datatables.min.js?t=<?= filemtime(RELATIVE_PATH . 'libraries/datatable/datatables.min.js') ?>"></script>
 <?php
 $jsDir   = opendir(RELATIVE_PATH . 'js/');
 $jsFiles = [];

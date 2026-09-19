@@ -586,9 +586,10 @@ trait Plex
 
         $userToken  = trim(strval($user['token'] ?? ''));
         $missingPin = !empty($user['pin_required']) && trim(strval($user['pin'] ?? '')) == '';
+        $scopeKeys  = $this->historyLibraryKeys(intval($mediaApp['id'] ?? 0));
         $status     = [];
         if ($userToken != '' && !$missingPin) {
-            $library = $this->plexGetWatchStatusFromLibrary($url, $userToken, $username);
+            $library = $this->plexGetWatchStatusFromLibrary($url, $userToken, $username, $scopeKeys);
             if (!empty($library['auth'])) {
                 if ($userId) {
                     $this->database->lockMediaAppUserToken($userId);
@@ -612,14 +613,38 @@ trait Plex
             return $history;
         }
 
-        foreach (['movies', 'episodes'] as $kind) {
-            foreach ($history[$kind] ?? [] as $itemId => $watch) {
-                $status[$kind][$itemId] = mergeWatchState($status[$kind][$itemId] ?? [], $watch);
+        if (!$scopeKeys) {
+            foreach (['movies', 'episodes'] as $kind) {
+                foreach ($history[$kind] ?? [] as $itemId => $watch) {
+                    $status[$kind][$itemId] = mergeWatchState($status[$kind][$itemId] ?? [], $watch);
+                }
             }
         }
         $this->plexStoreUserLastSeen($userId, $lastSeen);
 
         return $status;
+    }
+
+    public function historyLibraryKeys($mediaAppId = 0)
+    {
+        global $cron;
+
+        $list = !empty($cron) ? ($cron->sidecar['history_libraries'] ?? []) : [];
+        if (!$list) {
+            return [];
+        }
+        $keys = [];
+        foreach ($list as $library) {
+            if ($mediaAppId && intval($library['media_app_id'] ?? 0) != $mediaAppId) {
+                continue;
+            }
+            $key = strval($library['key'] ?? '');
+            if ($key != '') {
+                $keys[$key] = true;
+            }
+        }
+
+        return $keys;
     }
 
     public function plexStoreUserLastSeen($userId, $seen)
@@ -660,7 +685,7 @@ trait Plex
         }
     }
 
-    public function plexGetWatchStatusFromLibrary($url, $token, $username = '')
+    public function plexGetWatchStatusFromLibrary($url, $token, $username = '', $scopeKeys = [])
     {
         $url     = rtrim(trim($url), '/');
         $headers = $this->plexHeaders($token);
@@ -709,6 +734,9 @@ trait Plex
             }
             $key = $this->plexValue($directory, 'key');
             if ($key == '') {
+                continue;
+            }
+            if ($scopeKeys && empty($scopeKeys[$key])) {
                 continue;
             }
             $kinds           = $type == 'movie' ? [1] : [4];
@@ -1525,7 +1553,7 @@ trait Plex
         }
         $body = strtolower(strval($body));
 
-        return str_contains($body, 'incorrect pin') || str_contains($body, 'invalid pin');
+        return str_contains_any($body, ['incorrect pin', 'invalid pin']);
     }
 
     public function plexSwitchHomeUserResult($adminToken, $serverId, $userUuid, $pin = '')
@@ -1601,7 +1629,7 @@ trait Plex
         }
         $body = strtolower(strval($body));
 
-        return str_contains($body, 'incorrect pin') || str_contains($body, 'invalid pin') || str_contains($body, 'pin required') || str_contains($body, 'missing pin');
+        return str_contains_any($body, ['incorrect pin', 'invalid pin', 'pin required', 'missing pin']);
     }
 
     public function plexSwitchAuthToken($curl)

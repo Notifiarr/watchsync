@@ -65,6 +65,115 @@ function toast(title, message, type)
     }, 10000);
 }
 // ---------------------------------------------------------------------------------------------
+function clipboard(elm, elmType)
+{
+    let txt = '';
+
+    switch (elmType) {
+        case 'html':
+            txt = $('#' + elm).html();
+            break;
+        case 'raw':
+            txt = elm;
+            break;
+        case 'val':
+            txt = $('#' + elm).val();
+            break;
+        case 'log': {
+            let lines = $('#' + elm).find('.log-viewer-text, .sync-log-text');
+            txt = lines.length
+                ? lines.map(function () { return $(this).text(); }).get().join('\n')
+                : ($('#' + elm).text() || '');
+            break;
+        }
+    }
+
+    if (!txt) {
+        toast('Copy Failed', 'Nothing found to copy with element "' + elm + '"', 'error');
+        return;
+    }
+
+    function copied()
+    {
+        toast('Copied', 'Contents copied to clipboard', 'success');
+    }
+
+    function failed()
+    {
+        toast('Copy Failed', 'Contents failed to copy to clipboard', 'error');
+    }
+
+    function fallback()
+    {
+        let host = document.querySelector('.modal.show .modal-content') || document.body;
+        let area = document.createElement('textarea');
+        area.value = txt;
+        area.setAttribute('readonly', '');
+        area.style.position = 'absolute';
+        area.style.top = '0';
+        area.style.left = '0';
+        area.style.width = '1px';
+        area.style.height = '1px';
+        area.style.padding = '0';
+        area.style.border = 'none';
+        area.style.outline = 'none';
+        area.style.boxShadow = 'none';
+        area.style.opacity = '0';
+        host.appendChild(area);
+        area.focus({ preventScroll: true });
+        area.select();
+        area.setSelectionRange(0, area.value.length);
+        let ok = false;
+        try {
+            ok = document.execCommand('copy');
+        } catch (error) {
+            ok = false;
+        }
+        host.removeChild(area);
+        if (ok) {
+            copied();
+        } else {
+            failed();
+        }
+    }
+
+    if (!window.isSecureContext || !navigator.clipboard || typeof navigator.clipboard.writeText != 'function') {
+        fallback();
+        return;
+    }
+
+    navigator.clipboard.writeText(txt).then(copied, function () {
+        fallback();
+    });
+}
+// ---------------------------------------------------------------------------------------------
+function initDataTable(selector, options)
+{
+    if (typeof $.fn.dataTable == 'undefined' || !$(selector).length) {
+        return null;
+    }
+    if ($.fn.dataTable.isDataTable(selector)) {
+        $(selector).DataTable().destroy();
+    }
+
+    return $(selector).dataTable($.extend(true, {
+        pageLength: 50,
+        lengthMenu: [25, 50, 100, 250],
+        paging: true,
+        ordering: true,
+        order: [],
+        autoWidth: false,
+        columnDefs: [{
+            targets: 'no-sort',
+            orderable: false
+        }],
+        initComplete: function () {
+            $(selector + '_filter input').attr('placeholder', 'Search');
+            $(selector + ' .sorting_disabled').removeClass('sorting_asc');
+        }
+    }, options || {}));
+}
+// ---------------------------------------------------------------------------------------------
 function pageLoadingStart()
 {
     $('#loading-modal .btn-close').hide();

@@ -58,93 +58,93 @@ switch ($_POST['event'] ?? '') {
         }
         $testPayloads = $notifications->getTestPayloads();
         ?>
-                                                        <div class="container-fluid">
-                                                            <h3><?= htmlEscape($platformName) ?></h3>
-                                                            <table class="table table-bordered table-hover table-no-squish">
-                                                                <thead>
-                                                                    <tr>
-                                                                        <th><input type="checkbox" class="form-check-input" onchange="$('.notification-trigger').prop('checked', $(this).prop('checked'))"></th>
-                                                                        <th><?= htmlEscape(translate('trigger')) ?></th>
-                                                                        <th><?= htmlEscape(translate('description')) ?></th>
-                                                                        <th><?= htmlEscape(translate('event')) ?></th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    <?php foreach ($notificationTriggersTable as $notificationTrigger) {
-                                                                        $triggerName = $notificationTrigger['name'];
-                                                                        $preview     = $testPayloads[$triggerName] ?? ['event' => $triggerName];
-                                                                        $fields      = $notifications->getTemplate($triggerName);
-                                                                        if ($fields) {
-                                                                            foreach ($preview as $payloadField => $payloadVal) {
-                                                                                if (!array_key_exists($payloadField, $fields) || $payloadVal == '' || $payloadVal == null) {
-                                                                                    unset($preview[$payloadField]);
+                                                                <div class="container-fluid">
+                                                                    <h3><?= htmlEscape($platformName) ?></h3>
+                                                                    <table class="table table-bordered table-hover table-no-squish">
+                                                                        <thead>
+                                                                            <tr>
+                                                                                <th><input type="checkbox" class="form-check-input" onchange="$('.notification-trigger').prop('checked', $(this).prop('checked'))"></th>
+                                                                                <th><?= htmlEscape(translate('trigger')) ?></th>
+                                                                                <th><?= htmlEscape(translate('description')) ?></th>
+                                                                                <th><?= htmlEscape(translate('event')) ?></th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            <?php foreach ($notificationTriggersTable as $notificationTrigger) {
+                                                                                $triggerName = $notificationTrigger['name'];
+                                                                                $preview     = $testPayloads[$triggerName] ?? ['event' => $triggerName];
+                                                                                $fields      = $notifications->getTemplate($triggerName);
+                                                                                if ($fields) {
+                                                                                    foreach ($preview as $payloadField => $payloadVal) {
+                                                                                        if (!array_key_exists($payloadField, $fields) || $payloadVal == '' || $payloadVal == null) {
+                                                                                            unset($preview[$payloadField]);
+                                                                                        }
+                                                                                    }
                                                                                 }
-                                                                            }
-                                                                        }
-                                                                        $previewJson = json_encode($preview, JSON_UNESCAPED_UNICODE);
-                                                                        if ($previewJson == false) {
-                                                                            $previewJson = '{}';
-                                                                        }
-                                                                        ?>
-                                                                                                <tr>
-                                                                                                    <td><input <?= in_array($notificationTrigger['id'], $existingTriggers) ? 'checked' : '' ?> type="checkbox" class="form-check-input notification-trigger" id="notificationTrigger-<?= intval($notificationTrigger['id']) ?>"></td>
-                                                                                                    <td>
-                                                                                                        <?php if ($linkRow) { ?>
-                                                                                                                                    <i class="far fa-bell" style="cursor: pointer;" title="<?= htmlEscape(translate('testNotification')) ?>" onclick="testNotify(<?= intval($linkRow['id']) ?>, '<?= htmlEscape($triggerName) ?>')"></i>
-                                                                                                        <?php } ?>
-                                                                                                        <?= htmlEscape($notificationTrigger['label']) ?>
-                                                                                                    </td>
-                                                                                                    <td><?= htmlEscape($notificationTrigger['description']) ?></td>
-                                                                                                    <td style="cursor: pointer;" data-name="<?= htmlEscape($triggerName) ?>" data-payload="<?= htmlEscape($previewJson) ?>" onclick="previewNotificationPayload(this)"><?= htmlEscape($notificationTrigger['event']) ?></td>
-                                                                                                </tr>
-                                                                    <?php } ?>
-                                                                </tbody>
-                                                            </table>
-                                                            <table class="table table-bordered table-hover table-no-squish">
-                                                                <thead>
-                                                                    <tr>
-                                                                        <th><?= htmlEscape(translate('setting')) ?></th>
-                                                                        <th></th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    <tr>
-                                                                        <td>
-                                                                            <?= htmlEscape(translate('senderName')) ?> <span class="small text-danger"><?= htmlEscape(translate('required')) ?></span><br>
-                                                                            <span class="small"><?= htmlEscape(translate('senderNameDescription')) ?></span>
-                                                                        </td>
-                                                                        <td><input data-required="true" type="text" class="form-control" value="<?= htmlEscape($existingName ?: $platformName) ?>" id="notificationPlatformParameter-name"></td>
-                                                                    </tr>
-                                                                    <?php foreach ($platformParameters as $platformParameterField => $platformParameterData) { ?>
-                                                                                                <tr>
-                                                                                                    <td>
-                                                                                                        <?= htmlEscape($platformParameterData['label']) ?>                                                                                    <?= !empty($platformParameterData['required']) ? ' <span class="small text-danger">' . htmlEscape(translate('required')) . '</span>' : '' ?><br>
-                                                                                                        <span class="small"><?= htmlEscape($platformParameterData['description']) ?></span>
-                                                                                                    </td>
-                                                                                                    <td>
-                                                                                                        <?php
-                                                                                                        switch ($platformParameterData['type']) {
-                                                                                                            case 'text':
-                                                                                                                ?><input <?= !empty($platformParameterData['required']) ? 'data-required="true"' : '' ?> type="text" id="notificationPlatformParameter-<?= htmlEscape($platformParameterField) ?>" class="form-control" value="<?= htmlEscape($existingParameters[$platformParameterField] ?? '') ?>"><?php
-                                                                                                                             break;
-                                                                                                        }
-                                                                                                        ?>
-                                                                                                    </td>
-                                                                                                </tr>
-                                                                    <?php } ?>
-                                                                </tbody>
-                                                            </table>
-                                                            <div class="text-center w-100 mt-3">
-                                                                <?php if ($linkRow) { ?>
-                                                                                            <button type="button" class="btn btn-outline-success" onclick="saveNotification(<?= $platformId ?>, <?= intval($linkRow['id']) ?>)"><?= htmlEscape(translate('save')) ?></button>
-                                                                                            <button type="button" class="btn btn-outline-danger" onclick="deleteNotification(<?= intval($linkRow['id']) ?>)"><?= htmlEscape(translate('remove')) ?></button>
-                                                                <?php } else { ?>
-                                                                                            <button type="button" class="btn btn-outline-success" onclick="addNotification(<?= $platformId ?>)"><?= htmlEscape(translate('add')) ?></button>
-                                                                <?php } ?>
-                                                            </div>
-                                                        </div>
-                                                        <?php
-                                                        exit;
+                                                                                $previewJson = json_encode($preview, JSON_UNESCAPED_UNICODE);
+                                                                                if ($previewJson == false) {
+                                                                                    $previewJson = '{}';
+                                                                                }
+                                                                                ?>
+                                                                                                            <tr>
+                                                                                                                <td><input <?= in_array($notificationTrigger['id'], $existingTriggers) ? 'checked' : '' ?> type="checkbox" class="form-check-input notification-trigger" id="notificationTrigger-<?= intval($notificationTrigger['id']) ?>"></td>
+                                                                                                                <td>
+                                                                                                                    <?php if ($linkRow) { ?>
+                                                                                                                                                    <i class="far fa-bell" style="cursor: pointer;" title="<?= htmlEscape(translate('testNotification')) ?>" onclick="testNotify(<?= intval($linkRow['id']) ?>, '<?= htmlEscape($triggerName) ?>')"></i>
+                                                                                                                    <?php } ?>
+                                                                                                                    <?= htmlEscape($notificationTrigger['label']) ?>
+                                                                                                                </td>
+                                                                                                                <td><?= htmlEscape($notificationTrigger['description']) ?></td>
+                                                                                                                <td style="cursor: pointer;" data-name="<?= htmlEscape($triggerName) ?>" data-payload="<?= htmlEscape($previewJson) ?>" onclick="previewNotificationPayload(this)"><?= htmlEscape($notificationTrigger['event']) ?></td>
+                                                                                                            </tr>
+                                                                            <?php } ?>
+                                                                        </tbody>
+                                                                    </table>
+                                                                    <table class="table table-bordered table-hover table-no-squish">
+                                                                        <thead>
+                                                                            <tr>
+                                                                                <th><?= htmlEscape(translate('setting')) ?></th>
+                                                                                <th></th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            <tr>
+                                                                                <td>
+                                                                                    <?= htmlEscape(translate('senderName')) ?> <span class="small text-danger"><?= htmlEscape(translate('required')) ?></span><br>
+                                                                                    <span class="small"><?= htmlEscape(translate('senderNameDescription')) ?></span>
+                                                                                </td>
+                                                                                <td><input data-required="true" type="text" class="form-control" value="<?= htmlEscape($existingName ?: $platformName) ?>" id="notificationPlatformParameter-name"></td>
+                                                                            </tr>
+                                                                            <?php foreach ($platformParameters as $platformParameterField => $platformParameterData) { ?>
+                                                                                                            <tr>
+                                                                                                                <td>
+                                                                                                                    <?= htmlEscape($platformParameterData['label']) ?>                                                                                                <?= !empty($platformParameterData['required']) ? ' <span class="small text-danger">' . htmlEscape(translate('required')) . '</span>' : '' ?><br>
+                                                                                                                    <span class="small"><?= htmlEscape($platformParameterData['description']) ?></span>
+                                                                                                                </td>
+                                                                                                                <td>
+                                                                                                                    <?php
+                                                                                                                    switch ($platformParameterData['type']) {
+                                                                                                                        case 'text':
+                                                                                                                            ?><input <?= !empty($platformParameterData['required']) ? 'data-required="true"' : '' ?> type="text" id="notificationPlatformParameter-<?= htmlEscape($platformParameterField) ?>" class="form-control" value="<?= htmlEscape($existingParameters[$platformParameterField] ?? '') ?>"><?php
+                                                                                                                                         break;
+                                                                                                                    }
+                                                                                                                    ?>
+                                                                                                                </td>
+                                                                                                            </tr>
+                                                                            <?php } ?>
+                                                                        </tbody>
+                                                                    </table>
+                                                                    <div class="text-center w-100 mt-3">
+                                                                        <?php if ($linkRow) { ?>
+                                                                                                        <button type="button" class="btn btn-outline-success" onclick="saveNotification(<?= $platformId ?>, <?= intval($linkRow['id']) ?>)"><?= htmlEscape(translate('save')) ?></button>
+                                                                                                        <button type="button" class="btn btn-outline-danger" onclick="deleteNotification(<?= intval($linkRow['id']) ?>)"><?= htmlEscape(translate('remove')) ?></button>
+                                                                        <?php } else { ?>
+                                                                                                        <button type="button" class="btn btn-outline-success" onclick="addNotification(<?= $platformId ?>)"><?= htmlEscape(translate('add')) ?></button>
+                                                                        <?php } ?>
+                                                                    </div>
+                                                                </div>
+                                                                <?php
+                                                                exit;
 
     case 'add':
     case 'save':

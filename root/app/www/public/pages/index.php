@@ -52,12 +52,12 @@ switch ($_POST['page'] ?? '') {
         break;
     default:
         ?>
-                                                        <div class="row">
-                                                            <div class="col-12">
-                                                                <h1 class="h3 mb-3"><?= htmlEscape(translate('pageNotFound')) ?></h1>
-                                                                <p class="mb-0"><?= htmlEscape(translate('pageNotAvailable')) ?></p>
-                                                            </div>
-                                                        </div>
-                                                        <?php
-                                                        break;
+                                                                <div class="row">
+                                                                    <div class="col-12">
+                                                                        <h1 class="h3 mb-3"><?= htmlEscape(translate('pageNotFound')) ?></h1>
+                                                                        <p class="mb-0"><?= htmlEscape(translate('pageNotAvailable')) ?></p>
+                                                                    </div>
+                                                                </div>
+                                                                <?php
+                                                                break;
 }

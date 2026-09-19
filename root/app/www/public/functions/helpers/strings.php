@@ -7,6 +7,47 @@
 ----------------------------------
 */
 
+function stri_contains($haystack, $needle)
+{
+    return str_contains(strtolower($haystack), strtolower($needle));
+}
+
+function str_equals_any($haystack, $needles)
+{
+    if (!$haystack) {
+        return false;
+    }
+
+    return in_array($haystack, $needles);
+}
+
+function str_contains_any($haystack, $needles)
+{
+    if (!$haystack) {
+        return false;
+    }
+
+    return array_reduce($needles, fn($a, $n) => $a || str_contains($haystack, $n), false);
+}
+
+function str_contains_all($haystack, $needles)
+{
+    if (!$haystack) {
+        return false;
+    }
+
+    return array_reduce($needles, fn($a, $n) => $a && str_contains($haystack, $n), true);
+}
+
+function str_compare($str1, $str2, $case = false)
+{
+    if ($case) {
+        return $str1 == $str2;
+    } else {
+        return strtolower($str1) == strtolower($str2);
+    }
+}
+
 function truncateEnd($str, $max, $minLength = false)
 {
     if (!is_string($str)) {
