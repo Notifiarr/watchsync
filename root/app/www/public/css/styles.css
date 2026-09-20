@@ -316,7 +316,8 @@ body {
     margin-right: 0.5rem;
 }
 
-.sync-log-modal-header .sync-log-copy {
+.sync-log-modal-header .sync-log-copy,
+.sync-log-modal-header .sync-log-download {
     flex: 0 0 auto;
     align-self: center;
     margin-right: 0.5rem;
@@ -459,7 +460,7 @@ body {
     position: relative;
 }
 
-.library-kind-banner {
+.library-type-banner {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -474,23 +475,23 @@ body {
     color: #fff;
 }
 
-.library-kind-label {
+.library-type-label {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.library-kind-watchers {
+.library-type-watchers {
     flex: 0 0 auto;
     opacity: 0.95;
 }
 
-.library-kind-movie {
+.library-type-movie {
     background: #0d6efd;
 }
 
-.library-kind-series {
+.library-type-series {
     background: #fd7e14;
 }
 

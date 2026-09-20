@@ -102,7 +102,7 @@ trait Dispatcher
                 }
                 $started = time();
                 $path    = $this->database->mysqli_backup('manual');
-                $success = (bool) $path;
+                $success = !empty($path);
                 logger(CRON_BACKUP_LOG, 'result=' . ($success ? 'success' : 'failed') . ($success ? ' path=' . $path : ''));
                 $this->notifyBackup('manual', $success, $success ? $path : '', $started);
                 return $success;
@@ -116,8 +116,8 @@ trait Dispatcher
 
             $queued = $this->database->getSetting('backupQueued');
             $time   = normalizeBackupTime($this->database->getSetting('backupTime') ?: '03:00');
-            $kind   = $queued ? 'manual' : 'automatic';
-            logger(CRON_BACKUP_LOG, 'type=' . $kind);
+            $type   = $queued ? 'manual' : 'automatic';
+            logger(CRON_BACKUP_LOG, 'type=' . $type);
             if (!$queued && date('H:i') != $time) {
                 logger(CRON_BACKUP_LOG, 'skip');
                 return false;
@@ -132,13 +132,13 @@ trait Dispatcher
             }
 
             $started = time();
-            $path    = $this->database->mysqli_backup($kind);
-            $success = (bool) $path;
+            $path    = $this->database->mysqli_backup($type);
+            $success = !empty($path);
             if ($success && $queued) {
                 $this->database->setSetting('backupQueued', '');
             }
             logger(CRON_BACKUP_LOG, 'result=' . ($success ? 'success' : 'failed') . ($success ? ' path=' . $path : ''));
-            $this->notifyBackup($kind, $success, $success ? $path : '', $started);
+            $this->notifyBackup($type, $success, $success ? $path : '', $started);
             return $success;
         } finally {
             $this->removeLockFile($lock);

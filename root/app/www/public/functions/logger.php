@@ -76,12 +76,12 @@ function loggerBlock($logfile, $lines)
     }
 
     if (!is_array($lines)) {
-        $lines = explode("\n", (string) $lines);
+        $lines = explode("\n", strval($lines));
     }
 
     $body = '';
     foreach ($lines as $line) {
-        $body .= rtrim((string) $line, "\r\n") . "\n";
+        $body .= rtrim(strval($line), "\r\n") . "\n";
     }
 
     $fp = fopen($logfile, 'ab');
@@ -101,7 +101,7 @@ function asciiTable($headers, $rows)
     $headers = array_values($headers);
     $widths  = [];
     foreach ($headers as $i => $header) {
-        $widths[$i] = strlen((string) $header);
+        $widths[$i] = strlen(strval($header));
     }
     $normalized = [];
     foreach ($rows as $row) {

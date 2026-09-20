@@ -55,6 +55,7 @@ trait Movie
     {
         $path = $this->normalizePath($path, 'movie');
         if ($path == '') {
+            $this->setLastError('empty movie path');
             return 0;
         }
 
@@ -63,6 +64,13 @@ trait Movie
                 VALUES
                 ('" . $this->prepare($title) . "', " . intval($year) . ", '" . $this->prepare($path) . "', " . intval($plex) . ", " . intval($emby) . ", " . intval($jellyfin) . ", " . $this->sqlStringOrNull($plexRemoteId) . ", " . $this->sqlStringOrNull($embyRemoteId) . ", " . $this->sqlStringOrNull($jellyfinRemoteId) . ", '" . $this->prepare($poster) . "')";
         if (!$this->query($sql)) {
+            $insertError = $this->getLastError() ?: ($this->error() ?: 'movie insert failed');
+            $row         = $this->findMediaLibraryItem(MOVIE_TABLE, $emby ? MediaPlatforms::EMBY : ($plex ? MediaPlatforms::PLEX : MediaPlatforms::JELLYFIN), $embyRemoteId ?: ($plexRemoteId ?: $jellyfinRemoteId), $path);
+            if ($row) {
+                $this->setLastError('');
+                return intval($row['id']);
+            }
+            $this->setLastError($insertError);
             return 0;
         }
 

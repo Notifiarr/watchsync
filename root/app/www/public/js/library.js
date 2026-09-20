@@ -1,6 +1,8 @@
 var libraryState = {
     type: 'all',
+    libraryKey: '',
     userId: 0,
+    watched: 'all',
     letter: '',
     loading: false,
     doneDown: false,
@@ -13,7 +15,9 @@ function libraryFilters()
 {
     return {
         type: $('#libraryType').val() || 'all',
-        userId: String($('#libraryUser').val() || '0')
+        libraryKey: String($('#libraryLibrary').val() || ''),
+        userId: String($('#libraryUser').val() || '0'),
+        watched: $('#libraryWatched').val() || 'all'
     };
 }
 // ---------------------------------------------------------------------------------------------
@@ -21,7 +25,9 @@ function libraryRequest(event, extra)
 {
     let data = '&event=' + encodeURIComponent(event)
         + '&type=' + encodeURIComponent(libraryState.type)
-        + '&userId=' + encodeURIComponent(libraryState.userId);
+        + '&libraryKey=' + encodeURIComponent(libraryState.libraryKey)
+        + '&userId=' + encodeURIComponent(libraryState.userId)
+        + '&watched=' + encodeURIComponent(libraryState.watched);
     extra = extra || {};
     Object.keys(extra).forEach(function (key) {
         if (extra[key] != '' && extra[key] != undefined && extra[key] != null) {
@@ -33,20 +39,20 @@ function libraryRequest(event, extra)
 // ---------------------------------------------------------------------------------------------
 function libraryCardHtml(item)
 {
-    let kind = item.kind == 'series' ? 'series' : 'movie';
+    let type = item.type == 'series' ? 'series' : 'movie';
     let card = $('<div class="card border shadow-sm h-100 library-card"></div>').attr({
-        'data-kind': kind,
+        'data-type': type,
         'data-id': item.id,
         'data-title': item.title || '',
         'data-letter': item.letter || '',
         'data-label': item.label || ''
     });
     let watchers = parseInt(item.watchers || 0, 10) || 0;
-    let banner = $('<div class="library-kind-banner library-kind-' + kind + '"></div>');
-    banner.append($('<span class="library-kind-label"></span>').text(
-        kind == 'series' ? translate('series') : translate('movie')
+    let banner = $('<div class="library-type-banner library-type-' + type + '"></div>');
+    banner.append($('<span class="library-type-label"></span>').text(
+        type == 'series' ? translate('series') : translate('movie')
     ));
-    banner.append($('<span class="library-kind-watchers"></span>').text(String(watchers)));
+    banner.append($('<span class="library-type-watchers"></span>').text(String(watchers)));
     card.append(banner);
     let poster = $('<div class="library-poster-wrap"></div>');
     if (item.poster) {
@@ -143,7 +149,7 @@ function libraryLoadPage(direction)
     if (rows.length) {
         let edge = direction == 'up' ? rows.first() : rows.last();
         extra.title = edge.attr('data-title') || '';
-        extra.kind = edge.attr('data-kind') || '';
+        extra.itemType = edge.attr('data-type') || '';
         extra.id = edge.attr('data-id') || '';
     }
 
@@ -206,20 +212,22 @@ function libraryReload()
     libraryState.seq++;
     libraryState.loading = false;
     libraryState.type = filters.type;
+    libraryState.libraryKey = filters.libraryKey;
     libraryState.userId = filters.userId;
+    libraryState.watched = filters.watched;
     libraryState.letter = '';
     libraryResetList();
     libraryLoadLetters();
     libraryLoadPage('down');
 }
 // ---------------------------------------------------------------------------------------------
-function openLibraryItem(kind, id, title)
+function openLibraryItem(type, id, title)
 {
     pageLoadingStart();
     $.ajax({
         url: BASE_URL + 'ajax/library.php',
         type: 'post',
-        data: '&event=itemWatch&kind=' + encodeURIComponent(kind) + '&id=' + encodeURIComponent(id),
+        data: '&event=itemWatch&type=' + encodeURIComponent(type) + '&id=' + encodeURIComponent(id),
         success: function (response) {
             dialogOpen({
                 id: 'library-item-watch',
@@ -261,7 +269,7 @@ $(document).on('page:loaded', function (event, pageKey) {
     libraryReload();
 });
 // ---------------------------------------------------------------------------------------------
-$(document).on('change', '#libraryType, #libraryUser', function () {
+$(document).on('change', '#libraryType, #libraryLibrary, #libraryUser, #libraryWatched', function () {
     if ($('#libraryList').length) {
         libraryReload();
     }
@@ -320,7 +328,7 @@ $(document).on('click', '#libraryStatsTable th.library-stats-sort', function () 
 });
 // ---------------------------------------------------------------------------------------------
 $(document).on('click', '.library-card', function () {
-    openLibraryItem($(this).attr('data-kind'), $(this).attr('data-id'), $(this).attr('data-label'));
+    openLibraryItem($(this).attr('data-type'), $(this).attr('data-id'), $(this).attr('data-label'));
 });
 // ---------------------------------------------------------------------------------------------
 $(document).on('click', '.library-series-cell', function (event) {

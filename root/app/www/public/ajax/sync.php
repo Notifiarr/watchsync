@@ -67,6 +67,7 @@ switch ($_POST['event'] ?? '') {
         exit;
 
     case 'libraryForm':
+        $mediaApps->purgeMedia();
         $syncLibraries = $mediaApps->getAppLibraries();
         require RELATIVE_PATH . 'pages/sync/library.php';
         exit;
@@ -149,7 +150,6 @@ switch ($_POST['event'] ?? '') {
                 'users'    => $users,
             ];
         }
-        $mediaApps->linkLibraries();
         $libraryLinks          = [];
         $libraryLinkIds        = [];
         $linkedLibraryAppCount = [];
@@ -304,7 +304,17 @@ switch ($_POST['event'] ?? '') {
             echo json_encode(['error' => true, 'message' => translate('noLibraries')]);
             exit;
         }
-        echo json_encode($cron->start(intval($mediaApp['id']), [], MediaSyncModes::PULL, MediaSyncTypes::LIBRARY, [], 0, MediaLibraryScans::LAST_SCAN));
+        $libraries = [];
+        foreach ($mediaApps->selectedScanLibraries() as $library) {
+            if (intval($library['media_app_id'] ?? 0) == intval($mediaApp['id'])) {
+                $libraries[] = $library;
+            }
+        }
+        if (!$libraries) {
+            echo json_encode(['error' => true, 'message' => translate('missingSyncLibraries')]);
+            exit;
+        }
+        echo json_encode($cron->start(intval($mediaApp['id']), [], MediaSyncModes::PULL, MediaSyncTypes::LIBRARY, $libraries, 0, MediaLibraryScans::LAST_SCAN));
         exit;
 
     case 'startAppHistory':
@@ -341,18 +351,25 @@ switch ($_POST['event'] ?? '') {
             echo json_encode(['error' => true, 'message' => translate('couldNotSaveSettings')]);
             exit;
         }
-        $mediaApps->setScanLibraries($items);
-        echo json_encode(['error' => false, 'message' => translate('saved')]);
+        $pruned  = $mediaApps->setScanLibraries($items);
+        $merged  = $database->dedupeLibrary();
+        $removed = intval($pruned['movies'] ?? 0) + intval($pruned['series'] ?? 0) + intval($pruned['episodes'] ?? 0);
+        $dupes   = intval($merged['movies'] ?? 0) + intval($merged['series'] ?? 0) + intval($merged['episodes'] ?? 0);
+        $message = translate('saved');
+        if ($removed || $dupes) {
+            $message .= ' (removed ' . $removed . ', merged ' . $dupes . ')';
+        }
+        echo json_encode(['error' => false, 'message' => $message, 'pruned' => $pruned, 'merged' => $merged]);
         exit;
 
     case 'saveParitySync':
-        $kind  = $_POST['kind'] ?? '';
+        $type  = $_POST['type'] ?? '';
         $items = json_decode($_POST['items'] ?? '', true);
-        if (($kind != 'user' && $kind != 'library') || !is_array($items)) {
+        if (($type != 'user' && $type != 'library') || !is_array($items)) {
             echo json_encode(['error' => true, 'message' => translate('couldNotSaveSettings')]);
             exit;
         }
-        $mediaApps->setParitySync($kind, $items);
+        $mediaApps->setParitySync($type, $items);
         echo json_encode(['error' => false, 'message' => translate('saved')]);
         exit;
 
@@ -475,27 +492,45 @@ switch ($_POST['event'] ?? '') {
         }
         $end      = intval($chunk['end'] ?? (intval($chunk['before']) + count($chunk['lines'])));
         $tailAttr = !empty($chunk['tail']) ? ' data-tail="1"' : '';
+        $copyAttr = $cron->logFitsViewer($logFile) ? '' : ' data-copy="0"';
         ?>
-                                                                <template id="syncLogFindTemplate">
-                                                                    <div class="sync-log-find">
-                                                                        <div class="input-group input-group-sm sync-log-find-input">
-                                                                            <input type="text" class="form-control" id="syncLogFind" data-id="<?= htmlEscape($job['id']) ?>" placeholder="<?= htmlEscape(translate('find')) ?>" autocomplete="off" spellcheck="false">
-                                                                            <button type="button" class="btn btn-outline-secondary" id="syncLogFindClear" title="<?= htmlEscape(translate('clear')) ?>"><i class="fa-solid fa-xmark"></i></button>
-                                                                            <button type="button" class="btn btn-outline-secondary" id="syncLogFindSearch" title="<?= htmlEscape(translate('find')) ?>"><i class="fa-solid fa-magnifying-glass"></i></button>
-                                                                        </div>
-                                                                        <span class="small text-nowrap fw-semibold" id="syncLogFindCount"></span>
-                                                                    </div>
-                                                                </template>
-                                                                <div class="sync-log-split" id="syncLogSplit">
-                                                                    <div class="sync-log-pane sync-log-pane-main" id="syncLogMainPane">
-                                                                        <pre class="mb-0 small sync-log-lines" id="syncLogLines" style="white-space: pre-wrap;" data-id="<?= htmlEscape($job['id']) ?>" data-status="<?= htmlEscape($job['status']) ?>" data-offset="<?= intval($offset) ?>" data-before="<?= intval($chunk['before']) ?>" data-end="<?= $end ?>"<?= !empty($chunk['done']) ? ' data-done="1"' : '' ?><?= $tailAttr ?>><?= $html ?></pre>
-                                                                    </div>
-                                                                    <div class="sync-log-pane sync-log-pane-matches d-none" id="syncLogMatchesPane">
-                                                                        <pre class="mb-0 small sync-log-lines" id="syncLogMatches" style="white-space: pre-wrap;"></pre>
-                                                                    </div>
-                                                                </div>
-                                                                <?php
-                                                                exit;
+        <template id="syncLogFindTemplate">
+            <div class="sync-log-find">
+                <div class="input-group input-group-sm sync-log-find-input">
+                    <input type="text" class="form-control" id="syncLogFind" data-id="<?= htmlEscape($job['id']) ?>" placeholder="<?= htmlEscape(translate('find')) ?>" autocomplete="off" spellcheck="false">
+                    <button type="button" class="btn btn-outline-secondary" id="syncLogFindClear" title="<?= htmlEscape(translate('clear')) ?>"><i class="fa-solid fa-xmark"></i></button>
+                    <button type="button" class="btn btn-outline-secondary" id="syncLogFindSearch" title="<?= htmlEscape(translate('find')) ?>"><i class="fa-solid fa-magnifying-glass"></i></button>
+                </div>
+                <span class="small text-nowrap fw-semibold" id="syncLogFindCount"></span>
+            </div>
+        </template>
+        <div class="sync-log-split" id="syncLogSplit">
+            <div class="sync-log-pane sync-log-pane-main" id="syncLogMainPane">
+                <pre class="mb-0 small sync-log-lines" id="syncLogLines" style="white-space: pre-wrap;" data-id="<?= htmlEscape($job['id']) ?>" data-status="<?= htmlEscape($job['status']) ?>" data-offset="<?= intval($offset) ?>" data-before="<?= intval($chunk['before']) ?>" data-end="<?= $end ?>" <?= !empty($chunk['done']) ? ' data-done="1"' : '' ?><?= $tailAttr ?><?= $copyAttr ?>><?= $html ?></pre>
+            </div>
+            <div class="sync-log-pane sync-log-pane-matches d-none" id="syncLogMatchesPane">
+                <pre class="mb-0 small sync-log-lines" id="syncLogMatches" style="white-space: pre-wrap;"></pre>
+            </div>
+        </div>
+        <?php
+        exit;
+
+    case 'downloadLog':
+        $id   = $_POST['id'] ?? $_GET['id'] ?? '';
+        $path = $cron->logFile($id);
+        if (!$path) {
+            echo json_encode([
+                'error'   => true,
+                'message' => translate('couldNotLoadLog'),
+            ]);
+            exit;
+        }
+
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . basename($path) . '"');
+        header('Content-Length: ' . filesize($path));
+        readfile($path);
+        exit;
 
     case 'logSearch':
         $id    = $_POST['id'] ?? '';

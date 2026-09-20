@@ -238,7 +238,7 @@ function openSyncLibrary()
         success: function (response) {
             dialogOpen({
                 id: 'sync-library-form',
-                title: translate('library'),
+                title: translate('librarySync'),
                 body: response,
                 footer: false,
                 size: 'lg',
@@ -335,14 +335,14 @@ function saveLibraryScan()
         success: function (response) {
             pageLoadingStop();
             if (!response || response.error) {
-                toast(translate('library'), (response && response.message) || translate('couldNotSaveSettings'), 'error');
+                toast(translate('librarySync'), (response && response.message) || translate('couldNotSaveSettings'), 'error');
                 return;
             }
-            toast(translate('library'), response.message || translate('saved'), 'success');
+            toast(translate('librarySync'), response.message || translate('saved'), 'success');
         },
         error: function () {
             pageLoadingStop();
-            toast(translate('library'), translate('couldNotSaveSettings'), 'error');
+            toast(translate('librarySync'), translate('couldNotSaveSettings'), 'error');
         }
     });
 }
@@ -412,7 +412,7 @@ function parityMasterId(item)
 {
     let $item = $(item);
     if ($item.attr('data-master') == '1') {
-        if ($item.attr('data-kind') == 'library') {
+        if ($item.attr('data-type') == 'library') {
             return $item.attr('data-app') + ':' + $item.attr('data-id');
         }
         return $item.attr('data-id');
@@ -465,14 +465,14 @@ function parityPlaceItem($item)
     });
 }
 // ---------------------------------------------------------------------------------------------
-function parityItemClass(kind)
+function parityItemClass(type)
 {
-    return kind == 'library' ? '.sync-parity-library' : '.sync-user';
+    return type == 'library' ? '.sync-parity-library' : '.sync-user';
 }
 // ---------------------------------------------------------------------------------------------
 function parityItemMasterValue($item)
 {
-    if ($item.attr('data-kind') == 'library') {
+    if ($item.attr('data-type') == 'library') {
         return String(parityMasterId($item) || '');
     }
     if ($item.attr('data-master') == '1') {
@@ -489,39 +489,39 @@ function parityUpdateMasterCheckbox($item)
 // ---------------------------------------------------------------------------------------------
 function parityMirrorChecks($item)
 {
-    let kind = $item.attr('data-kind');
+    let type = $item.attr('data-type');
     let group = parityItemMasterValue($item);
-    let $box = $item.find(parityItemClass(kind));
+    let $box = $item.find(parityItemClass(type));
     if (!$box.length) {
-        parityUpdateSelectAll(kind);
+        parityUpdateSelectAll(type);
         return;
     }
     let checked = $box.prop('checked');
     if (group) {
-        $('.parity-item[data-kind="' + kind + '"]').each(function () {
+        $('.parity-item[data-type="' + type + '"]').each(function () {
             if (parityItemMasterValue($(this)) != group) {
                 return;
             }
-            $(this).find(parityItemClass(kind)).prop('checked', checked);
+            $(this).find(parityItemClass(type)).prop('checked', checked);
         });
     }
-    parityUpdateSelectAll(kind);
+    parityUpdateSelectAll(type);
 }
 // ---------------------------------------------------------------------------------------------
-function parityUpdateSelectAll(kind)
+function parityUpdateSelectAll(type)
 {
-    let cls = parityItemClass(kind);
-    $('.parity-select-all[data-kind="' + kind + '"]').each(function () {
+    let cls = parityItemClass(type);
+    $('.parity-select-all[data-type="' + type + '"]').each(function () {
         let app = $(this).attr('data-app');
-        let $boxes = $('.parity-item[data-kind="' + kind + '"][data-app="' + app + '"]').find(cls);
+        let $boxes = $('.parity-item[data-type="' + type + '"][data-app="' + app + '"]').find(cls);
         $(this).prop('checked', $boxes.length > 0 && $boxes.filter(':checked').length == $boxes.length);
     });
 }
 // ---------------------------------------------------------------------------------------------
-function paritySyncItems(kind)
+function paritySyncItems(type)
 {
     let items = {};
-    let cls = parityItemClass(kind);
+    let cls = parityItemClass(type);
     $(cls).each(function () {
         if ($(this).closest('.parity-item').attr('data-master') != '1') {
             return;
@@ -532,14 +532,14 @@ function paritySyncItems(kind)
     return items;
 }
 // ---------------------------------------------------------------------------------------------
-function saveParitySync(kind)
+function saveParitySync(type)
 {
     pageLoadingStart();
     $.ajax({
         url: BASE_URL + 'ajax/sync.php',
         type: 'post',
         dataType: 'json',
-        data: '&event=saveParitySync&kind=' + encodeURIComponent(kind) + '&items=' + encodeURIComponent(JSON.stringify(paritySyncItems(kind))),
+        data: '&event=saveParitySync&type=' + encodeURIComponent(type) + '&items=' + encodeURIComponent(JSON.stringify(paritySyncItems(type))),
         success: function (response) {
             pageLoadingStop();
             if (!response || response.error) {
@@ -581,7 +581,7 @@ function paritySelect(item)
 
     let $first = $(paritySelected);
     let $second = $(item);
-    if ($first.attr('data-kind') != $second.attr('data-kind')) {
+    if ($first.attr('data-type') != $second.attr('data-type')) {
         toast(translate('parity'), translate('mustLinkMainSource'), 'error');
         return;
     }
@@ -611,9 +611,9 @@ function paritySelect(item)
         return;
     }
 
-    let kind = $first.attr('data-kind');
+    let type = $first.attr('data-type');
     let payload = '';
-    if (kind == 'user') {
+    if (type == 'user') {
         payload = '&event=linkUser&masterUserId=' + encodeURIComponent(masterId) + '&linkedUserId=' + encodeURIComponent(listener.attr('data-id'));
     } else {
         let parts = String(masterId).split(':');
@@ -637,7 +637,7 @@ function paritySelect(item)
             let linkedApp = String(response.linkedAppId || listener.attr('data-app'));
             let linkedId = String(response.linkedId || listener.attr('data-id'));
             listener.attr('data-link', group);
-            $('.parity-item[data-kind="' + kind + '"]').each(function () {
+            $('.parity-item[data-type="' + type + '"]').each(function () {
                 let $item = $(this);
                 if ($item.attr('data-master') == '1' && String(parityMasterId($item)) == String(group)) {
                     parityAddLinkIcon($item, color, linkedApp, linkedId);
@@ -654,10 +654,10 @@ function paritySelect(item)
     });
 }
 // ---------------------------------------------------------------------------------------------
-function parityUnlink(kind, appId, id, isMaster)
+function parityUnlink(type, appId, id, isMaster)
 {
     let payload = '';
-    if (kind == 'user') {
+    if (type == 'user') {
         payload = '&event=unlinkUser&userId=' + encodeURIComponent(id) + '&master=' + (isMaster ? '1' : '');
     } else {
         payload = '&event=unlinkLibrary&mediaAppId=' + encodeURIComponent(appId) + '&libraryKey=' + encodeURIComponent(id) + '&master=' + (isMaster ? '1' : '');
@@ -681,7 +681,7 @@ function parityUnlink(kind, appId, id, isMaster)
             }).each(function () {
                 $moved = $moved.add($(this).closest('.parity-item'));
             }).remove();
-            $('.parity-item[data-kind="' + kind + '"][data-master="0"]').filter(function () {
+            $('.parity-item[data-type="' + type + '"][data-master="0"]').filter(function () {
                 return String($(this).attr('data-app')) == String(appId) && String($(this).attr('data-id')) == String(id);
             }).attr('data-link', '').each(function () {
                 $moved = $moved.add(this);
@@ -704,7 +704,7 @@ $(document).on('click', '.parity-unlink', function (event) {
     event.stopPropagation();
     let $icon = $(this);
     let $item = $icon.closest('.parity-item');
-    parityUnlink($item.attr('data-kind'), $icon.attr('data-app'), $icon.attr('data-id'), 0);
+    parityUnlink($item.attr('data-type'), $icon.attr('data-app'), $icon.attr('data-id'), 0);
 });
 // ---------------------------------------------------------------------------------------------
 $(document).on('click', '.parity-item', function (event) {
@@ -722,15 +722,15 @@ $(document).on('change', '.sync-user, .sync-parity-library', function () {
 });
 // ---------------------------------------------------------------------------------------------
 $(document).on('change', '.parity-select-all', function () {
-    let kind = $(this).attr('data-kind');
+    let type = $(this).attr('data-type');
     let app = $(this).attr('data-app');
-    let cls = parityItemClass(kind);
+    let cls = parityItemClass(type);
     let checked = $(this).prop('checked');
-    $('.parity-item[data-kind="' + kind + '"][data-app="' + app + '"]').find(cls).each(function () {
+    $('.parity-item[data-type="' + type + '"][data-app="' + app + '"]').find(cls).each(function () {
         $(this).prop('checked', checked);
         parityMirrorChecks($(this).closest('.parity-item'));
     });
-    parityUpdateSelectAll(kind);
+    parityUpdateSelectAll(type);
 });
 // ---------------------------------------------------------------------------------------------
 function startParityLibrariesSync()
@@ -1160,14 +1160,30 @@ function loadSyncLogChunk()
 function mountSyncLogFind()
 {
     $('#sync-log-dialog .modal-header').addClass('sync-log-modal-header');
-    $('#sync-log-dialog .modal-header').find('.sync-log-find, .sync-log-copy').remove();
-    $('#sync-log-dialog .modal-header').find('.modal-title').after(
-        $('<i class="fas fa-copy text-primary sync-log-copy" style="cursor: pointer;" title="' + translate('copy') + '" onclick="clipboard(\'syncLogLines\', \'log\');"></i>')
-    );
+    $('#sync-log-dialog .modal-header').find('.sync-log-find, .sync-log-copy, .sync-log-download').remove();
+    let id = $('#sync-log-dialog #syncLogLines').attr('data-id') || '';
+    let $anchor = $('#sync-log-dialog .modal-header').find('.modal-title');
+    if ($('#sync-log-dialog #syncLogLines').attr('data-copy') != '0') {
+        $anchor = $('<i class="fas fa-copy text-primary sync-log-copy" style="cursor: pointer;" title="' + translate('copy') + '" onclick="clipboard(\'syncLogLines\', \'log\');"></i>');
+        $('#sync-log-dialog .modal-header').find('.modal-title').after($anchor);
+    }
+    let $download = $('<i class="fas fa-file-download text-primary sync-log-download" style="cursor: pointer;" title="' + translate('downloadLog') + '"></i>');
+    $download.on('click', function () {
+        downloadSyncLog(id);
+    });
+    $anchor.after($download);
     if (!$('#sync-log-dialog #syncLogFindTemplate').length) {
         return;
     }
-    $('#sync-log-dialog .modal-header').find('.sync-log-copy').after($('#sync-log-dialog #syncLogFindTemplate').html());
+    $('#sync-log-dialog .modal-header').find('.sync-log-download').after($('#sync-log-dialog #syncLogFindTemplate').html());
+}
+// ---------------------------------------------------------------------------------------------
+function downloadSyncLog(id)
+{
+    if (!id) {
+        return;
+    }
+    window.location = BASE_URL + 'ajax/sync.php?event=downloadLog&id=' + encodeURIComponent(id);
 }
 // ---------------------------------------------------------------------------------------------
 function resetSyncLogFind()

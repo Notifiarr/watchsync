@@ -71,6 +71,7 @@ interface MediaAppEndpoints
     public const ENDPOINT_PLEX_LIBRARY                = '%s/library/sections/%s';
     public const ENDPOINT_PLEX_LIBRARY_ITEMS          = '%s/library/sections/%s/all?type=%s&X-Plex-Container-Start=%s&X-Plex-Container-Size=%s';
     public const ENDPOINT_PLEX_SERIES_EPISODES        = '%s/library/metadata/%s/allLeaves?X-Plex-Container-Start=%s&X-Plex-Container-Size=%s';
+    public const ENDPOINT_PLEX_METADATA               = '%s/library/metadata/%s?includeGuids=1&checkFiles=1';
     public const ENDPOINT_PLEX_HISTORY                = '%s/status/sessions/history/all?accountID=%s&sort=viewedAt:desc&X-Plex-Container-Start=%s&X-Plex-Container-Size=%s';
     public const ENDPOINT_PLEX_HISTORY_RECENT         = '%s/status/sessions/history/all?sort=viewedAt:desc&X-Plex-Container-Start=%s&X-Plex-Container-Size=%s';
     public const ENDPOINT_PLEX_SCROBBLE               = '%s/:/scrobble?identifier=com.plexapp.plugins.library&key=%s';

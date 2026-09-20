@@ -60,6 +60,7 @@ try {
                 'error'  => false,
                 'header' => $header,
                 'log'    => $read['data'] != '' ? formatLogViewerHtml($read['data']) : htmlEscape(translate('emptyLog')),
+                'size'   => intval($read['size']),
             ];
             break;
         case 'downloadLog':

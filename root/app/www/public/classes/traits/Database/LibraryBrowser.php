@@ -45,63 +45,158 @@ trait LibraryBrowser
         return array_values(array_unique(array_filter($ids)));
     }
 
-    public function libraryBrowserKinds($type)
+    public function libraryBrowserTypes($filter)
     {
-        if ($type == 'movie') {
+        if ($filter == 'movie') {
             return ['movie'];
         }
-        if ($type == 'series') {
+        if ($filter == 'series') {
             return ['series'];
         }
 
         return ['movie', 'series'];
     }
 
-    public function libraryBrowserWatchedWhere($kind, $userIds)
+    public function libraryBrowserFilterUserIds($mediaAppUserId, $watched = 'all')
     {
-        if (!$userIds) {
+        if ($watched == 'all') {
+            return [];
+        }
+
+        $id = intval($mediaAppUserId);
+        if ($id) {
+            return $this->libraryBrowserUserIds($id);
+        }
+
+        $ids    = [];
+        $master = [];
+        foreach ($this->getMediaApps() as $mediaApp) {
+            if ($mediaApp['active'] && intval($mediaApp['role']) == MediaAppRoles::MASTER) {
+                $master = $mediaApp;
+                break;
+            }
+        }
+        if (!$master) {
+            return [];
+        }
+        foreach ($this->getMediaAppUsers($master['id']) as $user) {
+            foreach ($this->libraryBrowserUserIds(intval($user['id'])) as $userId) {
+                $ids[] = $userId;
+            }
+        }
+
+        return array_values(array_unique(array_filter($ids)));
+    }
+
+    public function libraryBrowserPathWhere($roots)
+    {
+        if (!$roots) {
             return '';
         }
 
-        $ids   = implode(',', array_map('intval', $userIds));
-        $watch = '(started = 1 OR finished > 0 OR inprogress > 0)';
-        if ($kind == 'movie') {
-            return "id IN (SELECT movie_id FROM " . USER_MOVIE_LINK_TABLE . " WHERE media_app_user_id IN (" . $ids . ") AND " . $watch . ")";
+        $parts = [];
+        foreach ($roots as $root) {
+            $root = $this->normalizeLibraryPath($root);
+            if ($root == '') {
+                continue;
+            }
+            $parts[] = "`path` = '" . $this->prepare($root) . "'";
+            $parts[] = "`path` LIKE '" . $this->prepare($root) . "/%'";
+            $key     = $this->pathSlashlessKey($root);
+            if ($key != '') {
+                $parts[] = "LOWER(REPLACE(REPLACE(`path`, '/', ''), '\\\\', '')) LIKE '" . $this->prepare($key) . "%'";
+            }
+        }
+        if (!$parts) {
+            return '';
         }
 
-        return "id IN (SELECT e.series_id FROM " . EPISODE_TABLE . " e INNER JOIN " . USER_EPISODE_LINK_TABLE . " l ON l.episode_id = e.id WHERE l.media_app_user_id IN (" . $ids . ") AND (l.started = 1 OR l.finished > 0 OR l.inprogress > 0))";
+        return '(' . implode(' OR ', $parts) . ')';
+    }
+
+    public function libraryBrowserWatchedWhere($type, $userIds, $watched = 'all')
+    {
+        if ($watched == 'all' || !$userIds) {
+            return '';
+        }
+
+        $ids = implode(',', array_map('intval', $userIds));
+        if ($type == 'movie') {
+            if ($watched == 'never') {
+                return "id NOT IN (SELECT movie_id FROM " . USER_MOVIE_LINK_TABLE . "
+                        WHERE media_app_user_id IN (" . $ids . ")
+                          AND (started = 1 OR finished > 0 OR inprogress > 0))";
+            }
+            if ($watched == 'completed') {
+                return "id IN (SELECT movie_id FROM " . USER_MOVIE_LINK_TABLE . "
+                        WHERE media_app_user_id IN (" . $ids . ")
+                          AND finished > 0)";
+            }
+
+            return "id IN (SELECT movie_id FROM " . USER_MOVIE_LINK_TABLE . "
+                    WHERE media_app_user_id IN (" . $ids . ")
+                      AND finished = 0
+                      AND (started = 1 OR inprogress > 0))";
+        }
+
+        if ($watched == 'never') {
+            return "id NOT IN (SELECT e.series_id FROM " . EPISODE_TABLE . " e
+                    INNER JOIN " . USER_EPISODE_LINK_TABLE . " l ON l.episode_id = e.id
+                    WHERE l.media_app_user_id IN (" . $ids . ")
+                      AND (l.started = 1 OR l.finished > 0 OR l.inprogress > 0))";
+        }
+        if ($watched == 'completed') {
+            return "id IN (SELECT e.series_id FROM " . EPISODE_TABLE . " e
+                    INNER JOIN " . USER_EPISODE_LINK_TABLE . " l ON l.episode_id = e.id
+                    WHERE l.media_app_user_id IN (" . $ids . ")
+                      AND l.finished > 0)";
+        }
+
+        return "id IN (SELECT e.series_id FROM " . EPISODE_TABLE . " e
+                INNER JOIN " . USER_EPISODE_LINK_TABLE . " l ON l.episode_id = e.id
+                WHERE l.media_app_user_id IN (" . $ids . ")
+                  AND l.finished = 0
+                  AND (l.started = 1 OR l.inprogress > 0))";
     }
 
     public function libraryBrowserCursorWhere($cursor, $direction)
     {
-        if (!$cursor || (($cursor['title'] ?? '') == '' && empty($cursor['kind']) && empty($cursor['id']))) {
+        if (!$cursor || (($cursor['title'] ?? '') == '' && empty($cursor['type']) && empty($cursor['id']))) {
             return '';
         }
 
         $title = $this->prepare($cursor['title'] ?? '');
-        $kind  = $this->prepare($cursor['kind'] ?? '');
+        $type  = $this->prepare($cursor['type'] ?? '');
         $id    = intval($cursor['id'] ?? 0);
         if ($direction == 'up') {
-            return "(title < '" . $title . "' OR (title = '" . $title . "' AND kind < '" . $kind . "') OR (title = '" . $title . "' AND kind = '" . $kind . "' AND id < " . $id . "))";
+            return "(title < '" . $title . "' OR (title = '" . $title . "' AND type < '" . $type . "') OR (title = '" . $title . "' AND type = '" . $type . "' AND id < " . $id . "))";
         }
 
-        return "(title > '" . $title . "' OR (title = '" . $title . "' AND kind > '" . $kind . "') OR (title = '" . $title . "' AND kind = '" . $kind . "' AND id > " . $id . "))";
+        return "(title > '" . $title . "' OR (title = '" . $title . "' AND type > '" . $type . "') OR (title = '" . $title . "' AND type = '" . $type . "' AND id > " . $id . "))";
     }
 
-    public function getLibraryBrowserItems($type, $userIds, $cursor, $direction, $letter, $limit)
+    public function getLibraryBrowserItems($filter, $userIds, $cursor, $direction, $letter, $limit, $watched = 'all', $roots = [])
     {
         $items     = [];
         $limit     = max(1, min(100, intval($limit) ?: 50));
         $direction = $direction == 'up' ? 'up' : 'down';
-        $kinds     = $this->libraryBrowserKinds($type);
+        $types     = $this->libraryBrowserTypes($filter);
         $parts     = [];
+        $pathWhere = $this->libraryBrowserPathWhere($roots);
 
-        foreach ($kinds as $kind) {
-            $table = $kind == 'movie' ? MOVIE_TABLE : SERIES_TABLE;
-            $sql   = "SELECT id, title, year, poster, '" . $kind . "' AS kind FROM " . $table;
-            $watch = $this->libraryBrowserWatchedWhere($kind, $userIds);
+        foreach ($types as $type) {
+            $table  = $type == 'movie' ? MOVIE_TABLE : SERIES_TABLE;
+            $sql    = "SELECT id, title, year, poster, '" . $type . "' AS type FROM " . $table;
+            $wheres = [];
+            if ($pathWhere) {
+                $wheres[] = $pathWhere;
+            }
+            $watch = $this->libraryBrowserWatchedWhere($type, $userIds, $watched);
             if ($watch) {
-                $sql .= " WHERE " . $watch;
+                $wheres[] = $watch;
+            }
+            if ($wheres) {
+                $sql .= " WHERE " . implode(' AND ', $wheres);
             }
             $parts[] = $sql;
         }
@@ -120,8 +215,8 @@ trait LibraryBrowser
             $where[] = $cursorWhere;
         }
 
-        $order = $direction == 'up' ? 'title DESC, kind DESC, id DESC' : 'title ASC, kind ASC, id ASC';
-        $sql   = "SELECT id, title, year, poster, kind FROM (" . $union . ") library_items";
+        $order = $direction == 'up' ? 'title DESC, type DESC, id DESC' : 'title ASC, type ASC, id ASC';
+        $sql   = "SELECT id, title, year, poster, type FROM (" . $union . ") library_items";
         if ($where) {
             $sql .= " WHERE " . implode(' AND ', $where);
         }
@@ -150,7 +245,7 @@ trait LibraryBrowser
             if (!$id) {
                 continue;
             }
-            if (($row['kind'] ?? '') == 'series') {
+            if (($row['type'] ?? '') == 'series') {
                 $seriesIds[] = $id;
             } else {
                 $movieIds[] = $id;
@@ -161,7 +256,7 @@ trait LibraryBrowser
         $seriesUsers = $this->libraryBrowserHistoryUserMap('series', $seriesIds);
         foreach ($items as &$row) {
             $id = intval($row['id'] ?? 0);
-            if (($row['kind'] ?? '') == 'series') {
+            if (($row['type'] ?? '') == 'series') {
                 $row['watchers'] = count($seriesUsers[$id] ?? []);
             } else {
                 $row['watchers'] = count($movieUsers[$id] ?? []);
@@ -172,7 +267,7 @@ trait LibraryBrowser
         return $items;
     }
 
-    public function libraryBrowserHistoryUserMap($kind, $itemIds)
+    public function libraryBrowserHistoryUserMap($type, $itemIds)
     {
         $map = [];
         $ids = array_values(array_unique(array_filter(array_map('intval', $itemIds))));
@@ -210,7 +305,7 @@ trait LibraryBrowser
 
         $idList = implode(',', $ids);
         $watch  = '(started = 1 OR finished > 0 OR inprogress > 0)';
-        if ($kind == 'movie') {
+        if ($type == 'movie') {
             $sql = "SELECT movie_id AS item_id, media_app_user_id
                     FROM " . USER_MOVIE_LINK_TABLE . "
                     WHERE movie_id IN (" . $idList . ")
@@ -239,18 +334,26 @@ trait LibraryBrowser
         return $map;
     }
 
-    public function getLibraryBrowserLetters($type, $userIds)
+    public function getLibraryBrowserLetters($filter, $userIds, $watched = 'all', $roots = [])
     {
-        $counts = [];
-        $kinds  = $this->libraryBrowserKinds($type);
-        $parts  = [];
+        $counts    = [];
+        $types     = $this->libraryBrowserTypes($filter);
+        $parts     = [];
+        $pathWhere = $this->libraryBrowserPathWhere($roots);
 
-        foreach ($kinds as $kind) {
-            $table = $kind == 'movie' ? MOVIE_TABLE : SERIES_TABLE;
-            $sql   = "SELECT CASE WHEN UPPER(LEFT(title, 1)) BETWEEN 'A' AND 'Z' THEN UPPER(LEFT(title, 1)) ELSE '#' END AS letter, COUNT(*) AS total FROM " . $table;
-            $watch = $this->libraryBrowserWatchedWhere($kind, $userIds);
+        foreach ($types as $type) {
+            $table  = $type == 'movie' ? MOVIE_TABLE : SERIES_TABLE;
+            $sql    = "SELECT CASE WHEN UPPER(LEFT(title, 1)) BETWEEN 'A' AND 'Z' THEN UPPER(LEFT(title, 1)) ELSE '#' END AS letter, COUNT(*) AS total FROM " . $table;
+            $wheres = [];
+            if ($pathWhere) {
+                $wheres[] = $pathWhere;
+            }
+            $watch = $this->libraryBrowserWatchedWhere($type, $userIds, $watched);
             if ($watch) {
-                $sql .= " WHERE " . $watch;
+                $wheres[] = $watch;
+            }
+            if ($wheres) {
+                $sql .= " WHERE " . implode(' AND ', $wheres);
             }
             $sql     .= " GROUP BY letter";
             $parts[]  = $sql;
@@ -269,19 +372,19 @@ trait LibraryBrowser
         return $counts;
     }
 
-    public function getLibraryItem($kind, $id)
+    public function getLibraryItem($type, $id)
     {
-        if ($kind == 'movie') {
+        if ($type == 'movie') {
             return $this->getMovie($id);
         }
-        if ($kind == 'series') {
+        if ($type == 'series') {
             return $this->getSeries($id);
         }
 
         return [];
     }
 
-    public function getLibraryItemWatchMatrix($kind, $itemId)
+    public function getLibraryItemWatchMatrix($type, $itemId)
     {
         $itemId = intval($itemId);
         $apps   = [];
@@ -298,9 +401,9 @@ trait LibraryBrowser
 
         $users = $master ? $this->getMediaAppUsers($master['id']) : [];
         $cells = [];
-        if ($kind == 'movie') {
+        if ($type == 'movie') {
             $cells = $this->libraryMovieWatchCells($itemId);
-        } else if ($kind == 'series') {
+        } else if ($type == 'series') {
             $cells = $this->librarySeriesWatchCells($itemId);
         }
 

@@ -59,19 +59,19 @@ trait UserMovieLink
             'episode' => [],
         ];
         $user     = $this->getMediaAppUser($userId);
-        $sql      = "SELECT 'movie' AS kind, id, movie_id AS item_id, started, inprogress, finished
+        $sql      = "SELECT 'movie' AS type, id, movie_id AS item_id, started, inprogress, finished
                 FROM " . USER_MOVIE_LINK_TABLE . "
                 WHERE media_app_user_id = " . $userId . "
                 AND platform = " . $platform . "
                 UNION ALL
-                SELECT 'episode' AS kind, id, episode_id AS item_id, started, inprogress, finished
+                SELECT 'episode' AS type, id, episode_id AS item_id, started, inprogress, finished
                 FROM " . USER_EPISODE_LINK_TABLE . "
                 WHERE media_app_user_id = " . $userId . "
                 AND platform = " . $platform;
         $res      = $this->query($sql);
         while ($row = $this->fetchAssoc($res)) {
-            $kind                                  = ($row['kind'] ?? '') == 'episode' ? 'episode' : 'movie';
-            $state[$kind][intval($row['item_id'])] = $row;
+            $type                                  = ($row['type'] ?? '') == 'episode' ? 'episode' : 'movie';
+            $state[$type][intval($row['item_id'])] = $row;
         }
 
         return [
@@ -126,6 +126,20 @@ trait UserMovieLink
             'id'      => $this->insertId(),
             'changed' => true,
         ];
+    }
+
+    public function deleteUserMovieLinkById($id)
+    {
+        $id = intval($id);
+        if (!$id) {
+            return 0;
+        }
+
+        $sql = "DELETE FROM " . USER_MOVIE_LINK_TABLE . "
+                WHERE id = " . $id;
+        $this->query($sql);
+
+        return $this->matchedRows();
     }
 
     public function deleteUserMovieLinksByUserIds($userIds)

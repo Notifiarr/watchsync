@@ -199,7 +199,7 @@ trait Jobs
 
         $matches = [];
         foreach ($this->logContentLines($id) as $index => $line) {
-            if (is_int(mb_stripos((string) $line, $query))) {
+            if (is_int(mb_stripos(strval($line), $query))) {
                 $matches[] = intval($index);
             }
         }
@@ -436,7 +436,7 @@ trait Jobs
     {
         $id = $this->sidecar['id'] ?? '';
         if (!$id) {
-            return true;
+            return false;
         }
 
         $row = $this->database->getSyncHistoryJob($id);
@@ -802,14 +802,14 @@ trait Jobs
         return $this->formatJob($job);
     }
 
-    public function createWebhookJob($kind, $mediaAppId = 0, $userId = 0)
+    public function createWebhookJob($type, $mediaAppId = 0, $userId = 0)
     {
         global $mediaApps;
 
         $mediaAppId = intval($mediaAppId);
         $userId     = intval($userId);
 
-        if ($kind == 'library') {
+        if ($type == 'library') {
             if ($this->runningJob('library') || $this->nextQueuedJob('library')) {
                 return [];
             }
@@ -820,24 +820,13 @@ trait Jobs
                     $libraries[] = $library;
                 }
             }
-            if (!$libraries && $mediaAppId) {
-                $stored = [];
-                foreach ($this->database->getMediaAppLibraries($mediaAppId) as $library) {
-                    $key = strval($library['key'] ?? '');
-                    if ($key == '') {
-                        continue;
-                    }
-                    $stored[] = [
-                        'media_app_id' => $mediaAppId,
-                        'key'          => $key,
-                    ];
-                }
-                $libraries = $mediaApps->labelAppLibraries($stored);
+            if (!$libraries) {
+                return [];
             }
 
             $job = $this->createJob($mediaAppId, [], MediaSyncModes::PULL, MediaSyncTypes::LIBRARY, $libraries, 0, MediaSyncTriggers::WEBHOOK, MediaLibraryScans::LAST_SCAN);
         } else {
-            if ($kind != 'history' || !$userId) {
+            if ($type != 'history' || !$userId) {
                 return [];
             }
 
@@ -1314,10 +1303,12 @@ trait Jobs
 
     public function shouldUpdateSyncSchedule($job)
     {
-        if (intval($job['trigger'] ?? 0) != MediaSyncTriggers::AUTOMATIC) {
+        if (!empty($job['follow_up'])) {
             return false;
         }
-        if (!empty($job['follow_up'])) {
+
+        $trigger = intval($job['trigger'] ?? 0);
+        if ($trigger == MediaSyncTriggers::WEBHOOK) {
             return false;
         }
 
@@ -1329,6 +1320,10 @@ trait Jobs
         global $mediaApps;
 
         $log = $this->logfile ?: ($this->sidecar['log_file'] ?? CRON_SYNC_LOG);
+        if (!$this->automaticEnabled('history')) {
+            logger($log, 'automated history sync disabled, skipping auto history sync');
+            return false;
+        }
         if (!$this->database->settingEnabled('syncHistoryNewLibraries')) {
             return false;
         }

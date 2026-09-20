@@ -60,7 +60,10 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                         <button class="nav-link" id="settings-sync-tab" data-bs-toggle="tab" data-bs-target="#settings-sync" type="button" role="tab"><?= htmlEscape(translate('sync')) ?></button>
                     </li>
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="settings-reset-tab" data-bs-toggle="tab" data-bs-target="#settings-reset" type="button" role="tab"><?= htmlEscape(translate('reset')) ?></button>
+                        <button class="nav-link" id="settings-library-tab" data-bs-toggle="tab" data-bs-target="#settings-library" type="button" role="tab"><?= htmlEscape(translate('library')) ?></button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="settings-history-tab" data-bs-toggle="tab" data-bs-target="#settings-history" type="button" role="tab"><?= htmlEscape(translate('history')) ?></button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="settings-login-tab" data-bs-toggle="tab" data-bs-target="#settings-login" type="button" role="tab"><?= htmlEscape(translate('login')) ?></button>
@@ -82,12 +85,12 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                             <label for="backupTime" class="form-label"><?= htmlEscape(translate('backupTime')) ?></label>
                             <select class="form-select" id="backupTime" name="backupTime">
                                 <?php foreach (range(0, 23) as $hour) { ?>
-                                                    <?php foreach ([0, 10, 20, 30, 40, 50] as $minute) {
-                                                        $option = sprintf('%02d:%02d', $hour, $minute);
-                                                        $label  = date('g:i A', mktime($hour, $minute, 0));
-                                                        ?>
-                                                                        <option value="<?= htmlEscape($option) ?>"<?= $option == $backupTime ? ' selected' : '' ?>><?= htmlEscape($label) ?></option>
-                                                    <?php } ?>
+                                                        <?php foreach ([0, 10, 20, 30, 40, 50] as $minute) {
+                                                            $option = sprintf('%02d:%02d', $hour, $minute);
+                                                            $label  = date('g:i A', mktime($hour, $minute, 0));
+                                                            ?>
+                                                                                <option value="<?= htmlEscape($option) ?>"<?= $option == $backupTime ? ' selected' : '' ?>><?= htmlEscape($label) ?></option>
+                                                        <?php } ?>
                                 <?php } ?>
                             </select>
                             <div class="form-text"><?= htmlEscape(translate('backupTimeDescription')) ?></div>
@@ -118,7 +121,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <label for="automaticParityHours" class="form-label mb-1"><?= htmlEscape(translate('intervalHours')) ?></label>
                                 <select class="form-select sync-interval-hours" id="automaticParityHours" data-minutes="#automaticParityMinutes">
                                     <?php foreach ($intervalHourOptions as $hour) { ?>
-                                                <option value="<?= $hour ?>"<?= intval($syncSettings['parityHours']) == $hour ? ' selected' : '' ?>><?= $hour ?></option>
+                                                    <option value="<?= $hour ?>"<?= intval($syncSettings['parityHours']) == $hour ? ' selected' : '' ?>><?= $hour ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
@@ -126,7 +129,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <label for="automaticParityMinutes" class="form-label mb-1"><?= htmlEscape(translate('intervalMinutes')) ?></label>
                                 <select class="form-select sync-interval-minutes" id="automaticParityMinutes"<?= intval($syncSettings['parityHours']) >= 24 ? ' disabled' : '' ?>>
                                     <?php foreach ($intervalMinuteOptions as $minute) { ?>
-                                                <option value="<?= $minute ?>"<?= intval($syncSettings['parityMinutes']) == $minute ? ' selected' : '' ?>><?= $minute ?></option>
+                                                    <option value="<?= $minute ?>"<?= intval($syncSettings['parityMinutes']) == $minute ? ' selected' : '' ?>><?= $minute ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
@@ -141,7 +144,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                             <label class="form-check-label" for="syncParityAutoLibraries"><?= htmlEscape(translate('syncParityAutoLibraries')) ?></label>
                             <div class="form-text"><?= htmlEscape(translate('syncParityAutoLibrariesDescription')) ?></div>
                         </div>
-                        <h2 class="h5"><?= htmlEscape(translate('libraries')) ?></h2>
+                        <h2 class="h5"><?= htmlEscape(translate('library')) ?></h2>
                         <p class="text-body-secondary"><?= htmlEscape(translate('syncLibrarySettingsDescription')) ?></p>
                         <div class="form-check form-switch mb-3">
                             <input class="form-check-input" type="checkbox" role="switch" id="automaticLibrary"<?= !empty($syncSettings['automaticLibrary']) ? ' checked' : '' ?>>
@@ -153,7 +156,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <label for="automaticLibraryHours" class="form-label mb-1"><?= htmlEscape(translate('intervalHours')) ?></label>
                                 <select class="form-select sync-interval-hours" id="automaticLibraryHours" data-minutes="#automaticLibraryMinutes">
                                     <?php foreach ($intervalHourOptions as $hour) { ?>
-                                                <option value="<?= $hour ?>"<?= intval($syncSettings['libraryHours']) == $hour ? ' selected' : '' ?>><?= $hour ?></option>
+                                                    <option value="<?= $hour ?>"<?= intval($syncSettings['libraryHours']) == $hour ? ' selected' : '' ?>><?= $hour ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
@@ -161,7 +164,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <label for="automaticLibraryMinutes" class="form-label mb-1"><?= htmlEscape(translate('intervalMinutes')) ?></label>
                                 <select class="form-select sync-interval-minutes" id="automaticLibraryMinutes"<?= intval($syncSettings['libraryHours']) >= 24 ? ' disabled' : '' ?>>
                                     <?php foreach ($intervalMinuteOptions as $minute) { ?>
-                                                <option value="<?= $minute ?>"<?= intval($syncSettings['libraryMinutes']) == $minute ? ' selected' : '' ?>><?= $minute ?></option>
+                                                    <option value="<?= $minute ?>"<?= intval($syncSettings['libraryMinutes']) == $minute ? ' selected' : '' ?>><?= $minute ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
@@ -183,7 +186,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <label for="automaticHistoryHours" class="form-label mb-1"><?= htmlEscape(translate('intervalHours')) ?></label>
                                 <select class="form-select sync-interval-hours" id="automaticHistoryHours" data-minutes="#automaticHistoryMinutes">
                                     <?php foreach ($intervalHourOptions as $hour) { ?>
-                                                <option value="<?= $hour ?>"<?= intval($syncSettings['historyHours']) == $hour ? ' selected' : '' ?>><?= $hour ?></option>
+                                                    <option value="<?= $hour ?>"<?= intval($syncSettings['historyHours']) == $hour ? ' selected' : '' ?>><?= $hour ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
@@ -191,7 +194,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <label for="automaticHistoryMinutes" class="form-label mb-1"><?= htmlEscape(translate('intervalMinutes')) ?></label>
                                 <select class="form-select sync-interval-minutes" id="automaticHistoryMinutes"<?= intval($syncSettings['historyHours']) >= 24 ? ' disabled' : '' ?>>
                                     <?php foreach ($intervalMinuteOptions as $minute) { ?>
-                                                <option value="<?= $minute ?>"<?= intval($syncSettings['historyMinutes']) == $minute ? ' selected' : '' ?>><?= $minute ?></option>
+                                                    <option value="<?= $minute ?>"<?= intval($syncSettings['historyMinutes']) == $minute ? ' selected' : '' ?>><?= $minute ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
@@ -215,7 +218,14 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                         </div>
                         <button type="button" class="btn btn-primary" onclick="saveSyncSettings();"><?= htmlEscape(translate('saveSettings')) ?></button>
                     </div>
-                    <div class="tab-pane fade" id="settings-reset" role="tabpanel">
+                    <div class="tab-pane fade" id="settings-library" role="tabpanel">
+                        <p class="text-body-secondary"><?= htmlEscape(translate('deleteLocalLibraryDescription')) ?></p>
+                        <div id="resetLibraryList">
+                            <?php require RELATIVE_PATH . 'pages/settings/resetLibrary.php'; ?>
+                        </div>
+                        <button type="button" class="btn btn-outline-danger mt-3" onclick="deleteLocalLibraries();"><?= htmlEscape(translate('deleteLocalLibraries')) ?></button>
+                    </div>
+                    <div class="tab-pane fade" id="settings-history" role="tabpanel">
                         <p class="text-body-secondary"><?= htmlEscape(translate('resetHistoryDescription')) ?></p>
                         <div id="resetUserList">
                             <?php require RELATIVE_PATH . 'pages/settings/reset.php'; ?>
@@ -253,9 +263,9 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                             <div class="mb-3">
                                 <div class="form-text"><?= htmlEscape(translate('loginCurrentConnection')) ?>: <span class="font-monospace"><?= htmlEscape($loginPeerIp != '' ? $loginPeerIp : translate('unknown')) ?></span>
                                     <?php if ($loginPeerAllowed) { ?>
-                                                <span class="text-success">(<?= htmlEscape(translate('loginPeerAllowed')) ?>)</span>
+                                                    <span class="text-success">(<?= htmlEscape(translate('loginPeerAllowed')) ?>)</span>
                                     <?php } else { ?>
-                                                <span class="text-warning">(<?= htmlEscape(translate('loginPeerNotAllowed')) ?>)</span>
+                                                    <span class="text-warning">(<?= htmlEscape(translate('loginPeerNotAllowed')) ?>)</span>
                                     <?php } ?>
                                 </div>
                             </div>

@@ -42,13 +42,29 @@ services:
 
 ## Setup
 
-Add your media apps (main required, listeneres needed for syncing)
+Initial login is admin:password, make sure you change it! Settings -> Login
 
-Sync to parity, this matches users and libraries across the apps based on main (make sure each user and library has a link across the apps or they wont sync)
+Settings -> Login
 
-Sync your libraries, this will populate the watchsync database with what each media app currently has
+- Update your login credentials
 
-Sync your watch history for users
+Media Apps
+
+- Add you Plex, Emby & Jellfin instances (main required, listeneres needed for syncing)
+
+Sync -> Parity
+
+- Users tab: this section gives you checkboxes for which users you want to keep in sync. Check them and click `Save sync users` so future automation knows which users to sync. Manually link any existing users on the listeners by clicking their name in the main app and then the listeners. After that, trigger a sync and this will create the main media app users on the listeners
+- Library tab: this is the same concept as the users tab and works the same way. Check the libraries you want to sync, link the ones that already exist, trigger a sync to create the ones that do not
+
+Sync -> Library
+
+- Same logic as the parity, check which libraries you want to keep in sync and hit save.
+- This will populate the watchsync database with what each media app currently has. Since last or full scan will be the same outcome for the first time.
+
+Sync -> History
+
+- If you want to dry run what will change use that button and the log file will show you an overview when it is done, otherwise check the users and run the sync
 
 ## Media matching
 
@@ -58,7 +74,7 @@ Currently the paths from main are used to match with paths on the listeners. As 
 
 The system looks at all media apps, finds which one has the newest timestamp & that is what is used. If one app has it marked as finished then all apps get set to finished, otherwise it takes the highest progress time and uses that.
 
-## More sync features
+## You want more sync features?
 
 This app is built for a single purpose and that is not to solve every sync item and make perfect replicas of the apps, it does not match ratings for example or lists or favorites or any other "thing" that the media apps do. If you want something that does a lot more stuff with a more involved setup then I would recommend looking at some of the other sync apps out there as this is not your solution.
 

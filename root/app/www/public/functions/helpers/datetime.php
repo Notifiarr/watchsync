@@ -89,7 +89,7 @@ function relativeBetweenDates($startDatetime, $endDatetime, $full = false)
 
 function normalizeBackupTime($time)
 {
-    if (!preg_match('/^(\d{1,2}):(\d{2})/', (string) $time, $match)) {
+    if (!preg_match('/^(\d{1,2}):(\d{2})/', strval($time), $match)) {
         return '03:00';
     }
 

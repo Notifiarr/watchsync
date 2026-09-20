@@ -9,28 +9,28 @@
 
 function isLogFile($name)
 {
-    $name = basename((string) $name);
+    $name = basename(strval($name));
 
     return $name != '' && $name[0] != '.' && str_ends_with($name, '.log');
 }
 
 function isContainerLogGroup($group)
 {
-    $group = strtolower(basename((string) $group));
+    $group = strtolower(basename(strval($group)));
 
     return str_equals_any($group, ['nginx', 'php']);
 }
 
 function isContainerLogFile($name)
 {
-    $name = strtolower(basename((string) $name));
+    $name = strtolower(basename(strval($name)));
 
     return $name == 'init-database.log' || str_starts_with($name, 'init-database-');
 }
 
 function isProtectedLog($relative)
 {
-    $relative = str_replace('\\', '/', (string) $relative);
+    $relative = str_replace('\\', '/', strval($relative));
     $relative = ltrim($relative, '/');
     $group    = explode('/', $relative)[0] ?? '';
 
@@ -125,7 +125,7 @@ function resolveLogRoot()
 
 function resolveLogFile($relative)
 {
-    $relative = str_replace('\\', '/', (string) $relative);
+    $relative = str_replace('\\', '/', strval($relative));
     $relative = ltrim($relative, '/');
     if ($relative == '' || str_contains($relative, '..') || !preg_match('/^[A-Za-z0-9._\/-]+$/', $relative)) {
         return '';
@@ -150,7 +150,7 @@ function resolveLogFile($relative)
 
 function resolveLogGroup($group)
 {
-    $group = basename((string) $group);
+    $group = basename(strval($group));
     if ($group == '' || $group[0] == '.') {
         return '';
     }
@@ -176,7 +176,7 @@ function readLogFile($path, $max = 2097152)
         return ['data' => '', 'trimmed' => false, 'size' => 0];
     }
     if ($size <= $max) {
-        return ['data' => (string) file_get_contents($path), 'trimmed' => false, 'size' => $size];
+        return ['data' => strval(file_get_contents($path)), 'trimmed' => false, 'size' => $size];
     }
 
     $fp = fopen($path, 'rb');
@@ -188,7 +188,7 @@ function readLogFile($path, $max = 2097152)
     $data = fread($fp, $max);
     fclose($fp);
 
-    return ['data' => (string) $data, 'trimmed' => true, 'size' => $size];
+    return ['data' => strval($data), 'trimmed' => true, 'size' => $size];
 }
 
 function formatLogViewerHtml($data)

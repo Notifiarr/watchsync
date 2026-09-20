@@ -144,7 +144,9 @@ trait SyncHistory
 
     public function deleteAllSyncHistory()
     {
-        return $this->query("DELETE FROM " . SYNC_HISTORY_TABLE);
+        $sql = "DELETE FROM " . SYNC_HISTORY_TABLE;
+
+        return $this->query($sql);
     }
 
     public function syncHistoryJson($value)

@@ -17,8 +17,12 @@ trait NotificationPlatform
 
         $notificationPlatformTable = [];
 
-        $this->query("DELETE FROM " . NOTIFICATION_LINK_TABLE . " WHERE platform = 4");
-        $this->query("DELETE FROM " . NOTIFICATION_PLATFORM_TABLE . " WHERE id = 4 OR platform = 'Webhook'");
+        $sql = "DELETE FROM " . NOTIFICATION_LINK_TABLE . "
+                WHERE platform = 4";
+        $this->query($sql);
+        $sql = "DELETE FROM " . NOTIFICATION_PLATFORM_TABLE . "
+                WHERE id = 4 OR platform = 'Webhook'";
+        $this->query($sql);
 
         $sql = "SELECT id, platform, parameters
                 FROM " . NOTIFICATION_PLATFORM_TABLE;

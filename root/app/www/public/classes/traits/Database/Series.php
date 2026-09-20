@@ -55,6 +55,7 @@ trait Series
     {
         $path = $this->normalizePath($path, 'series');
         if ($path == '') {
+            $this->setLastError('empty series path');
             return 0;
         }
 
@@ -63,6 +64,13 @@ trait Series
                 VALUES
                 ('" . $this->prepare($title) . "', " . intval($year) . ", '" . $this->prepare($path) . "', " . intval($plex) . ", " . intval($emby) . ", " . intval($jellyfin) . ", " . $this->sqlStringOrNull($plexRemoteId) . ", " . $this->sqlStringOrNull($embyRemoteId) . ", " . $this->sqlStringOrNull($jellyfinRemoteId) . ", '" . $this->prepare($poster) . "')";
         if (!$this->query($sql)) {
+            $insertError = $this->getLastError() ?: ($this->error() ?: 'series insert failed');
+            $row         = $this->findMediaLibraryItem(SERIES_TABLE, $emby ? MediaPlatforms::EMBY : ($plex ? MediaPlatforms::PLEX : MediaPlatforms::JELLYFIN), $embyRemoteId ?: ($plexRemoteId ?: $jellyfinRemoteId), $path);
+            if ($row) {
+                $this->setLastError('');
+                return intval($row['id']);
+            }
+            $this->setLastError($insertError);
             return 0;
         }
 

@@ -214,7 +214,7 @@ function resetWatchHistory()
         users.push($(this).val());
     });
     if (!users.length) {
-        toast(translate('reset'), translate('missingSyncUsers'), 'error');
+        toast(translate('history'), translate('missingSyncUsers'), 'error');
         return;
     }
     if (!confirm(translate('resetHistoryConfirm'))) {
@@ -231,15 +231,15 @@ function resetWatchHistory()
             pageLoadingStop();
 
             if (!response || response.error) {
-                toast(translate('reset'), (response && response.message) || translate('couldNotSaveSettings'), 'error');
+                toast(translate('history'), (response && response.message) || translate('couldNotSaveSettings'), 'error');
                 return;
             }
-            toast(translate('reset'), response.message || translate('resetHistoryComplete'), 'success');
+            toast(translate('history'), response.message || translate('resetHistoryComplete'), 'success');
             loadResetUsers();
         },
         error: function () {
             pageLoadingStop();
-            toast(translate('reset'), translate('couldNotSaveSettings'), 'error');
+            toast(translate('history'), translate('couldNotSaveSettings'), 'error');
         }
     });
 }
@@ -256,6 +256,59 @@ function loadResetUsers()
                 return;
             }
             $('#resetUserList').html(response.html);
+        }
+    });
+}
+// ---------------------------------------------------------------------------------------------
+function deleteLocalLibraries()
+{
+    let libraries = [];
+    $('.reset-local-library:checked').each(function () {
+        libraries.push($(this).val());
+    });
+    if (!libraries.length) {
+        toast(translate('library'), translate('missingLocalLibraries'), 'error');
+        return;
+    }
+    if (!confirm(translate('deleteLocalLibraryConfirm'))) {
+        return;
+    }
+
+    pageLoadingStart();
+    $.ajax({
+        url: BASE_URL + 'ajax/settings.php',
+        type: 'post',
+        dataType: 'json',
+        data: '&event=deleteLocalLibraries&libraries=' + encodeURIComponent(libraries.join(',')),
+        success: function (response) {
+            pageLoadingStop();
+
+            if (!response || response.error) {
+                toast(translate('library'), (response && response.message) || translate('couldNotSaveSettings'), 'error');
+                return;
+            }
+            toast(translate('library'), response.message || translate('deleteLocalLibraryComplete'), 'success');
+            loadResetLibraries();
+        },
+        error: function () {
+            pageLoadingStop();
+            toast(translate('library'), translate('couldNotSaveSettings'), 'error');
+        }
+    });
+}
+// ---------------------------------------------------------------------------------------------
+function loadResetLibraries()
+{
+    $.ajax({
+        url: BASE_URL + 'ajax/settings.php',
+        type: 'post',
+        dataType: 'json',
+        data: '&event=listResetLibraries',
+        success: function (response) {
+            if (!response || response.error) {
+                return;
+            }
+            $('#resetLibraryList').html(response.html);
         }
     });
 }

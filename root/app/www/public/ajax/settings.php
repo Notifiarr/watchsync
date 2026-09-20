@@ -150,19 +150,19 @@ try {
         case 'backupRunningRow':
             ob_start();
             ?>
-                                                                        <tr class="backup-running-row">
-                                                                            <td><?= htmlEscape(date('m/d/Y')) ?></td>
-                                                                            <td><?= htmlEscape(date('g:i:s A')) ?></td>
-                                                                            <td><?= htmlEscape(translate('manual')) ?></td>
-                                                                            <td></td>
-                                                                            <td class="backup-actions"><i class="fas fa-spinner fa-spin me-1"></i><?= htmlEscape(translate('running')) ?></td>
-                                                                        </tr>
-                                                                        <?php
-                                                                        $result = [
-                                                                            'error' => false,
-                                                                            'html'  => ob_get_clean(),
-                                                                        ];
-                                                                        break;
+            <tr class="backup-running-row">
+                <td><?= htmlEscape(date('m/d/Y')) ?></td>
+                <td><?= htmlEscape(date('g:i:s A')) ?></td>
+                <td><?= htmlEscape(translate('manual')) ?></td>
+                <td></td>
+                <td class="backup-actions"><i class="fas fa-spinner fa-spin me-1"></i><?= htmlEscape(translate('running')) ?></td>
+            </tr>
+            <?php
+            $result = [
+                'error' => false,
+                'html'  => ob_get_clean(),
+            ];
+            break;
         case 'listBackups':
             ob_start();
             require RELATIVE_PATH . 'pages/settings/backupList.php';
@@ -236,9 +236,64 @@ try {
                 'message' => translate('resetHistoryComplete'),
             ];
             break;
+        case 'deleteLocalLibraries':
+            $selected = [];
+            foreach (explode(',', $_POST['libraries'] ?? '') as $value) {
+                $value = trim(strval($value));
+                if ($value == '' || !str_contains($value, ':')) {
+                    continue;
+                }
+                $parts = explode(':', $value, 2);
+                $appId = intval($parts[0] ?? 0);
+                $key   = strval($parts[1] ?? '');
+                if (!$appId || $key == '') {
+                    continue;
+                }
+                $selected[$appId . ':' . $key] = ['media_app_id' => $appId, 'key' => $key];
+            }
+            if (!$selected) {
+                $result = [
+                    'error'   => true,
+                    'message' => translate('missingLocalLibraries'),
+                ];
+                break;
+            }
+            $roots = [];
+            foreach ($selected as $item) {
+                foreach ($database->getMediaAppLibraries($item['media_app_id']) as $library) {
+                    if (strval($library['key'] ?? '') != $item['key']) {
+                        continue;
+                    }
+                    foreach ($library['paths'] ?? [] as $path) {
+                        $path = $database->normalizeLibraryPath($path);
+                        if ($path != '') {
+                            $roots[] = $path;
+                        }
+                    }
+                }
+            }
+            $deleted = $database->deleteMediaLibraryItemsUnderRoots($roots);
+            $result  = [
+                'error'   => false,
+                'message' => translate('deleteLocalLibraryComplete', [
+                    intval($deleted['movies'] ?? 0),
+                    intval($deleted['series'] ?? 0),
+                    intval($deleted['episodes'] ?? 0),
+                ]),
+                'deleted' => $deleted,
+            ];
+            break;
         case 'listResetUsers':
             ob_start();
             require RELATIVE_PATH . 'pages/settings/reset.php';
+            $result = [
+                'error' => false,
+                'html'  => ob_get_clean(),
+            ];
+            break;
+        case 'listResetLibraries':
+            ob_start();
+            require RELATIVE_PATH . 'pages/settings/resetLibrary.php';
             $result = [
                 'error' => false,
                 'html'  => ob_get_clean(),

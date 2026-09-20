@@ -264,7 +264,7 @@ class MediaApps
             return translate('webhook');
         }
         if (intval($syncType) == MediaSyncTypes::LIBRARY) {
-            return translate('library');
+            return translate('librarySync');
         }
         if (intval($syncType) == MediaSyncTypes::HISTORY) {
             return translate('history');
@@ -465,17 +465,25 @@ class MediaApps
             }
             $isMaster  = intval($mediaApp['role']) == MediaAppRoles::MASTER;
             $libraries = $isMaster || !$masterLibraries ? $this->getLibraries($mediaApp) : $this->getLibraries($mediaApp, $masterLibraries);
-            foreach ($libraries as &$library) {
-                $library['sync'] = $this->scanLibrarySelected(intval($mediaApp['id']) . ':' . ($library['key'] ?? ''));
+            $visible   = [];
+            foreach ($libraries as $library) {
+                $key = strval($library['key'] ?? '');
+                if ($key == '') {
+                    continue;
+                }
+                if (!$this->libraryAllowedByParity(intval($mediaApp['id']), $key)) {
+                    continue;
+                }
+                $library['sync'] = $this->scanLibrarySelected(intval($mediaApp['id']) . ':' . $key);
+                $visible[]       = $library;
             }
-            unset($library);
             $apps[] = [
                 'id'        => $mediaApp['id'],
                 'name'      => $mediaApp['name'],
                 'platform'  => $mediaApp['platform'],
                 'role'      => $mediaApp['role'],
                 'online'    => $this->isOnline($mediaApp),
-                'libraries' => $libraries,
+                'libraries' => $visible,
             ];
         }
 
@@ -498,15 +506,233 @@ class MediaApps
 
     public function setScanLibraries($items)
     {
-        $state = [];
+        $previous = $this->scanLibraryState();
+        $state    = [];
+        $removed  = [];
         foreach ($items as $id => $enabled) {
-            $key = trim($id);
-            if ($key == '' || empty($enabled)) {
+            $key = trim(strval($id));
+            if ($key == '') {
+                continue;
+            }
+            $parts = explode(':', $key, 2);
+            if (count($parts) == 2 && !empty($enabled) && !$this->libraryAllowedByParity(intval($parts[0]), $parts[1])) {
+                $enabled = 0;
+            }
+            if (empty($enabled)) {
+                $state[$key] = 0;
+                if (!empty($previous[$key])) {
+                    $removed[] = $key;
+                }
                 continue;
             }
             $state[$key] = 1;
         }
+        foreach ($previous as $id => $enabled) {
+            if (array_key_exists($id, $state)) {
+                continue;
+            }
+            $parts      = explode(':', trim(strval($id)), 2);
+            $state[$id] = 0;
+            if (!empty($enabled)) {
+                $removed[] = $id;
+            }
+            if (count($parts) == 2 && !$this->libraryAllowedByParity(intval($parts[0]), $parts[1])) {
+                continue;
+            }
+        }
         $this->database->setSetting('libraryScanSync', json_encode($state));
+
+        return $this->pruneScanLibraryKeys(array_values(array_unique($removed)));
+    }
+
+    public function libraryPathsForKey($mediaAppId, $libraryKey)
+    {
+        $mediaAppId = intval($mediaAppId);
+        $libraryKey = strval($libraryKey);
+        if (!$mediaAppId || $libraryKey == '') {
+            return [];
+        }
+
+        $paths = [];
+        foreach ($this->database->getMediaAppLibraries($mediaAppId) as $library) {
+            if (strval($library['key'] ?? '') != $libraryKey && strval($library['guid'] ?? '') != $libraryKey) {
+                continue;
+            }
+            foreach ($library['paths'] ?? [] as $path) {
+                if (trim(strval($path)) != '') {
+                    $paths[] = strval($path);
+                }
+            }
+        }
+        if ($paths) {
+            return $paths;
+        }
+
+        $mediaApp = $this->database->getMediaApp($mediaAppId);
+        if (!$mediaApp) {
+            return [];
+        }
+        foreach ($this->getLibraries($mediaApp, [], true) as $library) {
+            if (strval($library['key'] ?? '') != $libraryKey && strval($library['guid'] ?? '') != $libraryKey) {
+                continue;
+            }
+            foreach ($library['paths'] ?? [] as $path) {
+                if (trim(strval($path)) != '') {
+                    $paths[] = strval($path);
+                }
+            }
+        }
+
+        return $paths;
+    }
+
+    public function libraryRootsForScanKeys($keys)
+    {
+        $roots = [];
+        foreach ($keys as $id) {
+            $parts = explode(':', trim(strval($id)), 2);
+            if (count($parts) != 2 || !intval($parts[0]) || $parts[1] == '') {
+                continue;
+            }
+            foreach ($this->libraryPathsForKey(intval($parts[0]), $parts[1]) as $path) {
+                $path = $this->database->normalizeLibraryPath($path);
+                if ($path != '') {
+                    $roots[$path] = $path;
+                }
+            }
+        }
+
+        return array_values($roots);
+    }
+
+    public function selectedScanLibraryRoots()
+    {
+        $keys = [];
+        foreach ($this->scanLibraryState() as $id => $enabled) {
+            if (empty($enabled)) {
+                continue;
+            }
+            $parts = explode(':', $id, 2);
+            if (count($parts) == 2 && !$this->libraryAllowedByParity(intval($parts[0]), $parts[1])) {
+                continue;
+            }
+            $keys[] = $id;
+        }
+
+        return $this->libraryRootsForScanKeys($keys);
+    }
+
+    public function unselectedScanLibraryRoots()
+    {
+        $keys  = [];
+        $state = $this->scanLibraryState();
+        foreach ($this->database->getMediaApps() as $mediaApp) {
+            foreach ($this->database->getMediaAppLibraries($mediaApp['id']) as $library) {
+                $id = intval($mediaApp['id']) . ':' . strval($library['key'] ?? '');
+                if ($id == intval($mediaApp['id']) . ':' || !empty($state[$id])) {
+                    continue;
+                }
+                $keys[] = $id;
+            }
+        }
+
+        return $this->libraryRootsForScanKeys($keys);
+    }
+
+    public function pruneScanLibraryKeys($keys)
+    {
+        return $this->pruneLibraryRoots($this->libraryRootsForScanKeys($keys));
+    }
+
+    public function pruneLibraryRoots($roots)
+    {
+        $selected = $this->selectedScanLibraryRoots();
+        $prune    = [];
+        foreach ($roots as $root) {
+            $root = $this->database->normalizeLibraryPath($root);
+            if ($root == '') {
+                continue;
+            }
+            $alsoSelected = false;
+            foreach ($selected as $keep) {
+                if (strcasecmp($keep, $root) == 0) {
+                    $alsoSelected = true;
+                    break;
+                }
+            }
+            if (!$alsoSelected) {
+                $prune[$root] = $root;
+            }
+        }
+
+        return $this->database->deleteMediaLibraryItemsUnderRoots(array_values($prune));
+    }
+
+    public function pruneUnselectedScanLibraryItems()
+    {
+        $roots = [];
+        if ($this->scanLibraryState()) {
+            foreach ($this->unselectedScanLibraryRoots() as $root) {
+                $roots[$root] = $root;
+            }
+        }
+        foreach ($this->parityDisabledLibraryRoots() as $root) {
+            $roots[$root] = $root;
+        }
+        if (!$roots) {
+            return ['movies' => 0, 'series' => 0, 'episodes' => 0];
+        }
+
+        return $this->pruneLibraryRoots(array_values($roots));
+    }
+
+    public function purgeMedia()
+    {
+        $this->disableScanLibrariesOutsideParity();
+
+        return $this->pruneUnselectedScanLibraryItems();
+    }
+
+    public function scanLibraryItemAllowed($mediaApp, $item)
+    {
+        $mediaAppId = intval($mediaApp['id'] ?? 0);
+        if (!$mediaAppId) {
+            return false;
+        }
+
+        $selectedKeys = [];
+        foreach ($this->scanLibraryState() as $id => $enabled) {
+            if (empty($enabled)) {
+                continue;
+            }
+            $parts = explode(':', $id, 2);
+            if (count($parts) == 2 && intval($parts[0]) == $mediaAppId && $parts[1] != '') {
+                $selectedKeys[$parts[1]] = true;
+            }
+        }
+        if (!$selectedKeys) {
+            return false;
+        }
+
+        $path = $this->database->normalizeLibraryPath($item['path'] ?? '');
+        if ($path == '') {
+            return false;
+        }
+
+        foreach ($this->database->getMediaAppLibraries($mediaAppId) as $library) {
+            $key = strval($library['key'] ?? '');
+            if ($key == '' || empty($selectedKeys[$key])) {
+                continue;
+            }
+            if (!$this->libraryAllowedByParity($mediaAppId, $key)) {
+                continue;
+            }
+            if ($this->database->pathUnderRoots($path, $library['paths'] ?? [])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function selectedScanLibraries()
@@ -518,6 +744,9 @@ class MediaApps
             }
             $parts = explode(':', $id, 2);
             if (count($parts) != 2 || !intval($parts[0]) || $parts[1] == '') {
+                continue;
+            }
+            if (!$this->libraryAllowedByParity(intval($parts[0]), $parts[1])) {
                 continue;
             }
             $libraries[] = [
@@ -712,7 +941,7 @@ class MediaApps
     public function getWatchStatus($mediaApp, $remoteId, $username = '', $userId = 0, $user = [])
     {
         if (!$this->isOnline($mediaApp)) {
-            return ['movies' => [], 'episodes' => []];
+            return ['movies' => [], 'episodes' => [], 'error' => true];
         }
 
         switch (intval($mediaApp['platform'])) {
@@ -723,7 +952,7 @@ class MediaApps
             case MediaPlatforms::JELLYFIN:
                 return $this->jellyfinGetWatchStatus($mediaApp['url'], $mediaApp['apikey'], $remoteId);
             default:
-                return ['movies' => [], 'episodes' => []];
+                return ['movies' => [], 'episodes' => [], 'error' => true];
         }
     }
 
@@ -1520,15 +1749,15 @@ class MediaApps
         return ['error' => false, 'message' => translate('saved')];
     }
 
-    public function libraryPosterPath($kind, $itemId)
+    public function libraryPosterPath($type, $itemId)
     {
-        $kind = $kind == 'series' ? 'series' : 'movie';
-        return POSTER_CACHE_PATH . $kind . '-' . intval($itemId);
+        $type = $type == 'series' ? 'series' : 'movie';
+        return POSTER_CACHE_PATH . $type . '-' . intval($itemId);
     }
 
-    public function libraryPosterExists($kind, $itemId)
+    public function libraryPosterExists($type, $itemId)
     {
-        $file = $this->libraryPosterPath($kind, $itemId);
+        $file = $this->libraryPosterPath($type, $itemId);
         return is_file($file) && filesize($file) > 0;
     }
 
@@ -1544,15 +1773,15 @@ class MediaApps
         }
     }
 
-    public function downloadLibraryPoster($mediaApp, $kind, $itemId, $remoteId, $poster)
+    public function downloadLibraryPoster($mediaApp, $type, $itemId, $remoteId, $poster)
     {
-        if ($kind == 'episode') {
+        if ($type == 'episode') {
             return false;
         }
         if (!$this->isOnline($mediaApp)) {
             return false;
         }
-        $file = $this->libraryPosterPath($kind, $itemId);
+        $file = $this->libraryPosterPath($type, $itemId);
         $url  = $this->libraryPosterUrl($mediaApp, $remoteId, $poster);
         if ($url == '') {
             return false;
@@ -1586,15 +1815,15 @@ class MediaApps
         return file_put_contents($file, $curl['response']) != false;
     }
 
-    public function ensureLibraryPosterCached($kind, $itemId)
+    public function ensureLibraryPosterCached($type, $itemId)
     {
-        $kind   = $kind == 'series' ? 'series' : 'movie';
+        $type   = $type == 'series' ? 'series' : 'movie';
         $itemId = intval($itemId);
-        if (!$itemId || $this->libraryPosterExists($kind, $itemId)) {
-            return $this->libraryPosterExists($kind, $itemId);
+        if (!$itemId || $this->libraryPosterExists($type, $itemId)) {
+            return $this->libraryPosterExists($type, $itemId);
         }
 
-        $row    = $kind == 'series' ? $this->database->getSeries($itemId) : $this->database->getMovie($itemId);
+        $row    = $type == 'series' ? $this->database->getSeries($itemId) : $this->database->getMovie($itemId);
         $poster = trim(strval($row['poster'] ?? ''));
         if (!$row || $poster == '') {
             return false;
@@ -1618,7 +1847,7 @@ class MediaApps
             if (intval($mediaApp['platform']) == MediaPlatforms::PLEX && $remoteId == '' && !str_starts_with($poster, '/') && !preg_match('#^https?://#i', $poster)) {
                 continue;
             }
-            if ($this->downloadLibraryPoster($mediaApp, $kind, $itemId, $remoteId, $poster)) {
+            if ($this->downloadLibraryPoster($mediaApp, $type, $itemId, $remoteId, $poster)) {
                 return true;
             }
         }

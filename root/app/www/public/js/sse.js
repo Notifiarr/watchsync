@@ -77,13 +77,51 @@ function applySyncLogStatus(status)
     if (!status || !$('#sync-log-dialog #syncLogLines').length) {
         return;
     }
+    let previous = $('#sync-log-dialog #syncLogLines').attr('data-status') || '';
     $('#sync-log-dialog #syncLogLines').attr('data-status', status);
     if (status != 'running') {
+        if (previous == 'running') {
+            pollSyncLogFinal();
+            return;
+        }
         stopSSEPoll();
         if ($('#syncHistory').length && typeof refreshSyncHistory == 'function') {
             refreshSyncHistory();
         }
     }
+}
+// ---------------------------------------------------------------------------------------------
+function pollSyncLogFinal()
+{
+    stopSSEPoll();
+    $.ajax({
+        url: (typeof BASE_URL != 'undefined' ? BASE_URL : '') + 'ajax/sync.php',
+        type: 'post',
+        dataType: 'json',
+        data: '&event=logTail&id=' + encodeURIComponent($('#sync-log-dialog #syncLogLines').attr('data-id') || '') + '&offset=' + encodeURIComponent($('#sync-log-dialog #syncLogLines').attr('data-offset') || '0'),
+        complete: function () {
+            if ($('#syncHistory').length && typeof refreshSyncHistory == 'function') {
+                refreshSyncHistory();
+            }
+        },
+        success: function (response) {
+            if (!response || response.error) {
+                return;
+            }
+            if (typeof response.offset != 'undefined') {
+                $('#sync-log-dialog #syncLogLines').attr('data-offset', response.offset);
+            }
+            if (response.lines && response.lines.length) {
+                appendSyncLogLines(response.lines);
+            }
+            if (response.status) {
+                $('#sync-log-dialog #syncLogLines').attr('data-status', response.status);
+            }
+            if (typeof syncLogFollow != 'undefined' && syncLogFollow && typeof scrollSyncLogToBottom == 'function') {
+                scrollSyncLogToBottom();
+            }
+        }
+    });
 }
 // ---------------------------------------------------------------------------------------------
 function pollSyncLog()
@@ -200,10 +238,10 @@ function initializeSSE(logId)
         }
 
         if (sseLogId && payload.status && payload.status != 'running') {
-            initializeSSE();
             if ($('.sync-automatic').length && typeof refreshAllSyncAutomaticCountdowns == 'function') {
                 refreshAllSyncAutomaticCountdowns();
             }
+            initializeSSE();
         }
     };
 

@@ -35,17 +35,32 @@ function libraryBrowserRequest()
     $type    = $_POST['type'] ?? 'all';
     $type    = in_array($type, ['movie', 'series'], true) ? $type : 'all';
     $userId  = intval($_POST['userId'] ?? 0);
-    $userIds = $userId ? $database->libraryBrowserUserIds($userId) : [];
+    $watched = strtolower(trim(strval($_POST['watched'] ?? 'all')));
+    if (!in_array($watched, ['never', 'started', 'completed'], true)) {
+        $watched = 'all';
+    }
+    $userIds = $database->libraryBrowserFilterUserIds($userId, $watched);
     $letter  = strtoupper(trim(strval($_POST['letter'] ?? '')));
     if ($letter != '' && $letter != '#' && !preg_match('/^[A-Z]$/', $letter)) {
         $letter = '';
     }
+    $libraryKey = trim(strval($_POST['libraryKey'] ?? ''));
+    $roots      = [];
+    if ($libraryKey != '') {
+        $master = $mediaApps->masterMediaApp();
+        if ($master) {
+            $roots = $mediaApps->libraryPathsForKey(intval($master['id']), $libraryKey);
+        }
+    }
 
     return [
-        'type'    => $type,
-        'userIds' => $userIds,
-        'letter'  => $letter,
-        'limit'   => 50,
+        'type'       => $type,
+        'userIds'    => $userIds,
+        'watched'    => $watched,
+        'libraryKey' => $libraryKey,
+        'roots'      => $roots,
+        'letter'     => $letter,
+        'limit'      => 50,
     ];
 }
 
@@ -53,7 +68,7 @@ function libraryBrowserItemPayload($row)
 {
     global $database, $mediaApps;
 
-    $kind  = ($row['kind'] ?? '') == 'series' ? 'series' : 'movie';
+    $type  = ($row['type'] ?? '') == 'series' ? 'series' : 'movie';
     $id    = intval($row['id']);
     $title = $row['title'] ?? '';
     $year  = intval($row['year'] ?? 0);
@@ -64,14 +79,14 @@ function libraryBrowserItemPayload($row)
 
     return [
         'id'       => $id,
-        'kind'     => $kind,
+        'type'     => $type,
         'title'    => $title,
         'year'     => $year,
         'letter'   => $database->libraryBrowserLetter($title),
         'label'    => $label,
         'watchers' => intval($row['watchers'] ?? 0),
-        'poster'   => trim(strval($row['poster'] ?? '')) != '' || $mediaApps->libraryPosterExists($kind, $id)
-            ? 'ajax/libraryPoster.php?kind=' . $kind . '&id=' . $id
+        'poster'   => trim(strval($row['poster'] ?? '')) != '' || $mediaApps->libraryPosterExists($type, $id)
+            ? 'ajax/libraryPoster.php?type=' . $type . '&id=' . $id
             : '',
     ];
 }
@@ -81,7 +96,7 @@ switch ($_POST['event'] ?? '') {
         $request = libraryBrowserRequest();
         echo json_encode([
             'error'   => false,
-            'letters' => $database->getLibraryBrowserLetters($request['type'], $request['userIds']),
+            'letters' => $database->getLibraryBrowserLetters($request['type'], $request['userIds'], $request['watched'], $request['roots']),
         ]);
         exit;
 
@@ -92,11 +107,11 @@ switch ($_POST['event'] ?? '') {
         if (trim(strval($_POST['title'] ?? '')) != '' || intval($_POST['id'] ?? 0)) {
             $cursor = [
                 'title' => strval($_POST['title'] ?? ''),
-                'kind'  => ($_POST['kind'] ?? '') == 'series' ? 'series' : 'movie',
+                'type'  => ($_POST['itemType'] ?? '') == 'series' ? 'series' : 'movie',
                 'id'    => intval($_POST['id'] ?? 0),
             ];
         }
-        $rows  = $database->getLibraryBrowserItems($request['type'], $request['userIds'], $cursor, $direction, $request['letter'], $request['limit']);
+        $rows  = $database->getLibraryBrowserItems($request['type'], $request['userIds'], $cursor, $direction, $request['letter'], $request['limit'], $request['watched'], $request['roots']);
         $items = [];
         foreach ($rows as $row) {
             $items[] = libraryBrowserItemPayload($row);
@@ -109,14 +124,14 @@ switch ($_POST['event'] ?? '') {
         exit;
 
     case 'itemWatch':
-        $kind = ($_POST['kind'] ?? '') == 'series' ? 'series' : 'movie';
+        $type = ($_POST['type'] ?? '') == 'series' ? 'series' : 'movie';
         $id   = intval($_POST['id'] ?? 0);
-        $item = $database->getLibraryItem($kind, $id);
+        $item = $database->getLibraryItem($type, $id);
         if (!$item) {
             echo '<div class="alert alert-danger mb-0" role="alert">' . htmlEscape(translate('libraryItemNotFound')) . '</div>';
             exit;
         }
-        $watch = $database->getLibraryItemWatchMatrix($kind, $id);
+        $watch = $database->getLibraryItemWatchMatrix($type, $id);
         require RELATIVE_PATH . 'pages/library/itemWatch.php';
         exit;
 

@@ -71,42 +71,42 @@ function curl($url, $headers = [], $method = 'GET', $payload = '', $userPass = [
     $response     = curl_exec($ch);
     $curlError    = curl_error($ch);
     $jsonResponse = json_decode($response, true);
-    $response     = !empty($jsonResponse) ? $jsonResponse : $response;
+    $parsed       = !empty($jsonResponse) ? $jsonResponse : $response;
     $error        = json_decode($curlError, true);
-    $code         = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $code         = intval(curl_getinfo($ch, CURLINFO_HTTP_CODE));
 
     global $cron;
     if (!empty($cron)) {
         $safeUrl = preg_replace('/([?&](X-Plex-Token|api_key|apikey|apiKey|AccessToken)=)[^&]*/i', '$1***', $url);
-        $line    = $method . ' [' . intval($code) . '] ' . $safeUrl;
-        $code    = intval($code);
-        if ($code >= 400 || $code == 0 || $curlError != '') {
-            $detail = '';
+        $failed  = $code >= 400 || $code == 0 || $curlError != '';
+        if ($failed) {
+            $body = '';
             if ($curlError != '') {
-                $detail = $curlError;
-            } else if (is_array($response) || is_object($response)) {
-                $detail = json_encode($response);
-            } else if (is_string($response) && $response != '') {
-                $detail = $response;
-            } else if ($response == false) {
-                $detail = 'request failed';
+                $body = $curlError;
+            } else if (is_array($parsed) || is_object($parsed)) {
+                $body = json_encode($parsed);
+            } else if (is_string($parsed) && $parsed != '') {
+                $body = $parsed;
+            } else if ($response === false) {
+                $body = 'request failed';
             }
-            $detail = trim(preg_replace('/\s+/', ' ', strval($detail)));
-            if ($detail != '') {
-                if (strlen($detail) > 500) {
-                    $detail = substr($detail, 0, 500) . '...';
-                }
-                $line .= ' error=' . $detail;
+            $body = trim(preg_replace('/\s+/', ' ', strval($body)));
+            if (strlen($body) > 1000) {
+                $body = substr($body, 0, 1000) . '...';
             }
+            $cron->log('request: ' . $method . ' ' . $safeUrl);
+            $cron->log('code: ' . $code);
+            $cron->log('response: ' . ($body != '' ? $body : '(empty)'));
+        } else {
+            $cron->log($method . ' [' . $code . '] ' . $safeUrl);
         }
-        $cron->log($line);
     }
 
     return [
         'url'      => $url,
         'method'   => $method,
-        'payload'  => $payload,
-        'response' => $response,
+        'payload'  => $payload ?? '',
+        'response' => $parsed,
         'error'    => $error,
         'code'     => $code,
     ];

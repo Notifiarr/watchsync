@@ -317,6 +317,18 @@ trait Jellyfin
             'episodes' => [],
         ];
         if (!$remoteId) {
+            $status['error'] = true;
+
+            return $status;
+        }
+
+        $url     = rtrim(trim($url), '/');
+        $headers = $this->jellyfinHeaders($apikey);
+        $probe   = curl(sprintf(MediaAppEndpoints::ENDPOINT_JELLYFIN_USER, $url, rawurlencode($remoteId)), $headers, 'GET');
+        $code    = intval($probe['code'] ?? 0);
+        if ($code < 200 || $code >= 300) {
+            $status['error'] = true;
+
             return $status;
         }
 

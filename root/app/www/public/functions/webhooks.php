@@ -479,31 +479,31 @@ function webhookNewItem($slug, $post)
         $row  = is_array($post['Metadata'] ?? null) ? $post['Metadata'] : [];
         $type = strtolower(strval($row['type'] ?? ''));
         if ($type == 'episode') {
-            $kind = 'episode';
+            $type = 'episode';
         } else if ($type == 'show') {
-            $kind = 'series';
+            $type = 'series';
         } else if ($type == 'movie') {
-            $kind = 'movie';
+            $type = 'movie';
         } else {
-            return ['kind' => ''];
+            return ['type' => ''];
         }
 
         return [
-            'kind' => $kind,
-            'item' => $mediaApps->plexLibraryItem($row, $kind == 'series' ? 2 : 0),
+            'type' => $type,
+            'item' => $mediaApps->plexLibraryItem($row, $type == 'series' ? 2 : 0),
         ];
     }
 
     $row  = is_array($post['Item'] ?? null) ? $post['Item'] : $post;
     $type = strtolower(strval($row['Type'] ?? ($row['ItemType'] ?? ($post['ItemType'] ?? ''))));
     if ($type == 'episode') {
-        $kind = 'episode';
+        $type = 'episode';
     } else if ($type == 'series') {
-        $kind = 'series';
+        $type = 'series';
     } else if ($type == 'movie') {
-        $kind = 'movie';
+        $type = 'movie';
     } else {
-        return ['kind' => ''];
+        return ['type' => ''];
     }
 
     $path = $slug == 'jellyfin' ? $mediaApps->jellyfinItemPath($row) : $mediaApps->embyItemPath($row);
@@ -512,12 +512,13 @@ function webhookNewItem($slug, $post)
     }
 
     return [
-        'kind' => $kind,
+        'type' => $type,
         'item' => [
             'remote_id'        => strval($row['Id'] ?? ($row['ItemId'] ?? ($post['ItemId'] ?? ''))),
             'title'            => strval($row['Name'] ?? ($post['Name'] ?? '')),
             'year'             => intval($row['ProductionYear'] ?? ($row['Year'] ?? ($post['Year'] ?? 0))),
             'path'             => $path,
+            'poster'           => $slug == 'jellyfin' ? $mediaApps->jellyfinPosterTag($row) : $mediaApps->embyPosterTag($row),
             'series_remote_id' => strval($row['SeriesId'] ?? ($post['SeriesId'] ?? '')),
             'series'           => strval($row['SeriesName'] ?? ($post['SeriesName'] ?? '')),
             'season'           => intval($row['ParentIndexNumber'] ?? ($row['SeasonNumber'] ?? ($post['SeasonNumber'] ?? 0))),
@@ -532,12 +533,12 @@ function webhookSavePayloadItem($app, $slug)
     global $cron;
 
     $built = webhookNewItem($slug, $_POST);
-    if (($built['kind'] ?? '') == '') {
+    if (($built['type'] ?? '') == '') {
         return false;
     }
-    $cron->saveWebhookLibraryItem($app, $built['kind'], $built['item']);
+    $result = $cron->saveWebhookLibraryItem($app, $built['type'], $built['item']);
 
-    return true;
+    return $result != '';
 }
 
 function webhookApply($slug, $parsed)
@@ -557,18 +558,14 @@ function webhookApply($slug, $parsed)
     $savedItem = webhookSavePayloadItem($app, $slug);
     if ($action == '' || $action == 'play') {
         if ($action == 'play' || !empty($parsed['progressOnly'])) {
-            return $savedItem ? $label . ' payload processed.' : 'Playback progress logged.';
+            return $savedItem ? $label . ' payload processed.' : $label . ' item ignored until library sync.';
         }
 
         return 'Unhandled event.';
     }
 
     if ($action == 'new') {
-        if (!$savedItem) {
-            return 'Unhandled new item.';
-        }
-
-        return $label . ' payload processed.';
+        return $savedItem ? $label . ' payload processed.' : $label . ' new item ignored until library sync.';
     }
 
     $type = strtolower(strval($parsed['itemType'] ?? ''));
@@ -589,7 +586,7 @@ function webhookApply($slug, $parsed)
     if ($type == 'movie') {
         $item = $database->getMovieByRemoteId($platform, $remoteId);
         if (!$item) {
-            return 'Unmatched item.';
+            return 'Unmatched item ignored until library sync.';
         }
         $existing = $database->getUserMovieLink($item['id'], $user['id'], $platform);
         $state    = webhookWatchState($action, $parsed['progress'] ?? 0, $parsed['runtime'] ?? 0, $existing);
@@ -597,7 +594,7 @@ function webhookApply($slug, $parsed)
     } else {
         $item = $database->getEpisodeByRemoteId($platform, $remoteId);
         if (!$item) {
-            return 'Unmatched item.';
+            return 'Unmatched item ignored until library sync.';
         }
         $existing = $database->getUserEpisodeLink($item['id'], $user['id'], $platform);
         $state    = webhookWatchState($action, $parsed['progress'] ?? 0, $parsed['runtime'] ?? 0, $existing);

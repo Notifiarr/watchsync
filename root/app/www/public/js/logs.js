@@ -1,4 +1,4 @@
-function setLogHeader(header)
+function setLogHeader(header, allowCopy)
 {
     $('#logHeader').empty();
     if (!header) {
@@ -6,7 +6,9 @@ function setLogHeader(header)
     }
 
     $('#logHeader').append(document.createTextNode(header + ' '));
-    $('#logHeader').append($('<i class="fas fa-copy text-primary" style="cursor: pointer;" title="' + translate('copy') + '" onclick="clipboard(\'logViewer\', \'log\');"></i>'));
+    if (allowCopy) {
+        $('#logHeader').append($('<i class="fas fa-copy text-primary" style="cursor: pointer;" title="' + translate('copy') + '" onclick="clipboard(\'logViewer\', \'log\');"></i>'));
+    }
 }
 // ---------------------------------------------------------------------------------------------
 function viewLog(name, hash)
@@ -30,7 +32,7 @@ function viewLog(name, hash)
                 $('#logViewer').text((response && response.message) || translate('couldNotLoadLog'));
                 return;
             }
-            setLogHeader(response.header || '');
+            setLogHeader(response.header || '', !(parseInt(response.size, 10) > 2097152));
             $('#logViewer').html(response.log || '');
             $('#logViewer').scrollTop($('#logViewer')[0].scrollHeight);
         },

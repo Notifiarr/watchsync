@@ -381,6 +381,18 @@ trait Emby
             'episodes' => [],
         ];
         if (!$remoteId) {
+            $status['error'] = true;
+
+            return $status;
+        }
+
+        $url     = rtrim(trim($url), '/');
+        $headers = $this->embyHeaders($apikey);
+        $probe   = curl(sprintf(MediaAppEndpoints::ENDPOINT_EMBY_USER, $url, rawurlencode($remoteId)), $headers, 'GET');
+        $code    = intval($probe['code'] ?? 0);
+        if ($code < 200 || $code >= 300) {
+            $status['error'] = true;
+
             return $status;
         }
 

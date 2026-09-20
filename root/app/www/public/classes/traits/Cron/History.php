@@ -35,6 +35,11 @@ trait History
         return !empty($this->sidecar['dry_run']);
     }
 
+    public function isAutomaticJob()
+    {
+        return intval($this->sidecar['trigger'] ?? 0) == MediaSyncTriggers::AUTOMATIC;
+    }
+
     public function syncWatch($mode)
     {
         if (!$this->hasLibraryData()) {
@@ -59,7 +64,7 @@ trait History
         if ($master) {
             global $mediaApps;
             $mediaApps->refreshUsers($master['id']);
-            if ($this->database->settingEnabled('syncHistoryNewUsers')) {
+            if ($this->isAutomaticJob() && $this->database->settingEnabled('syncHistoryNewUsers')) {
                 $ids = [];
                 foreach ($this->database->getMediaAppUsers($master['id']) as $user) {
                     $ids[] = intval($user['id']);
@@ -164,7 +169,10 @@ trait History
 
         $series = [];
         foreach ($this->database->getSeriesRows() as $row) {
-            $series[intval($row['id'])] = trim(strval($row['title'] ?? ''));
+            $series[intval($row['id'])] = [
+                'title' => trim(strval($row['title'] ?? '')),
+                'path'  => strval($row['path'] ?? ''),
+            ];
         }
 
         $index = [
@@ -197,7 +205,7 @@ trait History
         return $index;
     }
 
-    public function watchIndexItem($kind, $row, $platforms, $series)
+    public function watchIndexItem($type, $row, $platforms, $series)
     {
         $remote = [];
         $flag   = [];
@@ -205,10 +213,13 @@ trait History
             $flag[$platform]   = intval($row[$name] ?? 0);
             $remote[$platform] = trim(strval($row[$name . '_remote_id'] ?? ''));
         }
-        $id    = intval($row['id']);
-        $title = trim(strval($row['title'] ?? ''));
-        $label = $title;
-        if ($kind == 'movie') {
+        $id         = intval($row['id']);
+        $title      = trim(strval($row['title'] ?? ''));
+        $label      = $title;
+        $seriesId   = 0;
+        $seriesPath = '';
+        $misplaced  = false;
+        if ($type == 'movie') {
             $year = intval($row['year'] ?? 0);
             if ($label == '') {
                 $label = 'movie #' . $id;
@@ -216,9 +227,16 @@ trait History
                 $label .= ' (' . $year . ')';
             }
         } else {
-            $show = $series[intval($row['series_id'] ?? 0)] ?? '';
+            $seriesId   = intval($row['series_id'] ?? 0);
+            $seriesMeta = $series[$seriesId] ?? [];
+            if (is_array($seriesMeta)) {
+                $show       = trim(strval($seriesMeta['title'] ?? ''));
+                $seriesPath = strval($seriesMeta['path'] ?? '');
+            } else {
+                $show = trim(strval($seriesMeta));
+            }
             if ($show == '') {
-                $show = 'series #' . intval($row['series_id'] ?? 0);
+                $show = 'series #' . $seriesId;
             }
             $code  = 'S' . str_pad(strval(intval($row['season'] ?? 0)), 2, '0', STR_PAD_LEFT)
                 . 'E' . str_pad(strval(intval($row['episode'] ?? 0)), 2, '0', STR_PAD_LEFT);
@@ -226,15 +244,49 @@ trait History
             if ($title != '') {
                 $label .= ' ' . $title;
             }
+            $misplaced = $this->watchEpisodeMisplaced(strval($row['path'] ?? ''), $seriesPath, $seriesId);
         }
 
         return [
-            'id'     => $id,
-            'path'   => strval($row['path'] ?? ''),
-            'label'  => $label,
-            'flag'   => $flag,
-            'remote' => $remote,
+            'id'          => $id,
+            'path'        => strval($row['path'] ?? ''),
+            'label'       => $label,
+            'flag'        => $flag,
+            'remote'      => $remote,
+            'series_id'   => $seriesId,
+            'series_path' => $seriesPath,
+            'misplaced'   => $misplaced ? 1 : 0,
         ];
+    }
+
+    public function watchEpisodeMisplaced($episodePath, $seriesPath, $seriesId = 0)
+    {
+        $episodePath = $this->database->normalizeLibraryPath($episodePath);
+        $seriesPath  = $this->database->normalizeLibraryPath($seriesPath);
+        $seriesId    = intval($seriesId);
+        if ($episodePath == '' || $seriesPath == '' || !$seriesId) {
+            return false;
+        }
+        if ($this->database->pathUnderRoot($episodePath, $seriesPath)) {
+            return false;
+        }
+
+        $showPath = $this->database->mediaLibraryShowPath($episodePath);
+        if (
+            $showPath != '' && (
+                strcasecmp($showPath, $seriesPath) == 0
+                || $this->database->pathSlashlessKey($showPath) == $this->database->pathSlashlessKey($seriesPath)
+            )
+        ) {
+            return false;
+        }
+
+        $targetId = $this->database->findSeriesIdForEpisodePath($episodePath);
+        if (!$targetId || $targetId == $seriesId) {
+            return false;
+        }
+
+        return true;
     }
 
     public function watchLibraryTitle($libraries, $path)
@@ -258,6 +310,223 @@ trait History
         }
 
         return $best;
+    }
+
+    public function historyPlexApp()
+    {
+        $plex = [];
+        foreach ($this->database->getMediaApps() as $app) {
+            if (intval($app['platform'] ?? 0) != MediaPlatforms::PLEX || empty($app['active'])) {
+                continue;
+            }
+            if (intval($app['role'] ?? 0) == MediaAppRoles::MASTER) {
+                return $app;
+            }
+            if (!$plex) {
+                $plex = $app;
+            }
+        }
+
+        return $plex;
+    }
+
+    public function historyRepairUnlinkedItem($type, $item, $listenerApp, &$index)
+    {
+        global $mediaApps;
+
+        $itemId           = intval($item['id'] ?? 0);
+        $listenerPlatform = intval($listenerApp['platform'] ?? 0);
+        if (!$itemId || !$listenerPlatform) {
+            return [];
+        }
+        if (!empty($item['flag'][$listenerPlatform]) && trim(strval($item['remote'][$listenerPlatform] ?? '')) != '') {
+            return [];
+        }
+
+        $plexApp    = $this->historyPlexApp();
+        $plexRemote = trim(strval($item['remote'][MediaPlatforms::PLEX] ?? ''));
+        if (!$plexApp || $plexRemote == '') {
+            return [];
+        }
+
+        if (!isset($this->plexCheckFilesCache)) {
+            $this->plexCheckFilesCache = [];
+        }
+        if (!array_key_exists($plexRemote, $this->plexCheckFilesCache)) {
+            $this->plexCheckFilesCache[$plexRemote] = $mediaApps->plexResolvePathWithCheckFiles(
+                strval($plexApp['url'] ?? ''),
+                strval($plexApp['token'] ?? ''),
+                $plexRemote,
+            );
+        }
+        $fixedPath = strval($this->plexCheckFilesCache[$plexRemote] ?? '');
+        if ($fixedPath == '') {
+            return [];
+        }
+
+        $pathType  = $type == 'movie' ? 'movie' : 'episode';
+        $fixedPath = $this->database->normalizePath($fixedPath, $pathType);
+        if ($fixedPath == '') {
+            return [];
+        }
+
+        $currentPath = $this->database->normalizeLibraryPath($item['path'] ?? '');
+        $table       = $type == 'movie' ? MOVIE_TABLE : EPISODE_TABLE;
+        $pathChanged = strcasecmp($fixedPath, $currentPath) != 0;
+        if ($pathChanged) {
+            $this->database->forceLibraryItemPath($table, $itemId, $fixedPath, $pathType);
+            $item['path'] = $fixedPath;
+            logger($this->logfile, 'history path repair id=' . $itemId . ' type=' . $type
+                . ' from=' . $currentPath . ' to=' . $fixedPath);
+            loggerFlush($this->logfile);
+        }
+
+        $liveRemote = $this->historyFindListenerRemote($type, $item, $listenerApp, $fixedPath);
+        if ($liveRemote == '') {
+            $index[$type]['id'][$itemId] = $item;
+            if ($pathChanged) {
+                $this->recordHistoryLibraryRepair([
+                    'label'        => strval($item['label'] ?? ($type . ' #' . $itemId)),
+                    'from'         => $currentPath,
+                    'to'           => $fixedPath,
+                    'app'          => strval($listenerApp['name'] ?? ''),
+                    'path_changed' => true,
+                    'linked'       => false,
+                    'remote'       => '',
+                ]);
+            }
+            return [];
+        }
+
+        $this->database->setMediaLibraryPlatformById($table, $listenerPlatform, $liveRemote, $fixedPath, $itemId);
+        $item['flag'][$listenerPlatform]                        = 1;
+        $item['remote'][$listenerPlatform]                      = $liveRemote;
+        $index[$type]['id'][$itemId]                            = $item;
+        $index[$type]['remote'][$listenerPlatform][$liveRemote] = $item;
+        logger($this->logfile, 'history link repair id=' . $itemId . ' type=' . $type
+            . ' app=' . strval($listenerApp['name'] ?? '') . ' remote=' . $liveRemote);
+        loggerFlush($this->logfile);
+        $this->recordHistoryLibraryRepair([
+            'label'        => strval($item['label'] ?? ($type . ' #' . $itemId)),
+            'from'         => $currentPath,
+            'to'           => $fixedPath,
+            'app'          => strval($listenerApp['name'] ?? ''),
+            'path_changed' => $pathChanged,
+            'linked'       => true,
+            'remote'       => $liveRemote,
+        ]);
+
+        return $item;
+    }
+
+    public function recordHistoryLibraryRepair($repair)
+    {
+        if (empty($this->sidecar['library_repairs'])) {
+            $this->sidecar['library_repairs'] = [];
+        }
+        $key = strval($repair['label'] ?? '') . "\0" . strval($repair['app'] ?? '') . "\0" . strval($repair['to'] ?? '');
+        foreach ($this->sidecar['library_repairs'] as $existing) {
+            $existingKey = strval($existing['label'] ?? '') . "\0" . strval($existing['app'] ?? '') . "\0" . strval($existing['to'] ?? '');
+            if ($existingKey == $key) {
+                return;
+            }
+        }
+        $this->sidecar['library_repairs'][] = $repair;
+    }
+
+    public function historyLibraryRepairLines()
+    {
+        $lines = [];
+        foreach ($this->sidecar['library_repairs'] ?? [] as $repair) {
+            $label = strval($repair['label'] ?? '');
+            $app   = strval($repair['app'] ?? '');
+            $from  = strval($repair['from'] ?? '');
+            $to    = strval($repair['to'] ?? '');
+            if (!empty($repair['path_changed']) && !empty($repair['linked'])) {
+                $lines[] = 'Fixed path for ' . $label . ': ' . $from . ' -> ' . $to
+                    . '; linked on ' . $app . ' (remote ' . strval($repair['remote'] ?? '') . ')';
+            } else if (!empty($repair['path_changed'])) {
+                $lines[] = 'Fixed path for ' . $label . ': ' . $from . ' -> ' . $to
+                    . '; listener ' . $app . ' still not linked';
+            } else if (!empty($repair['linked'])) {
+                $lines[] = 'Linked ' . $label . ' on ' . $app . ' using checked path ' . $to
+                    . ' (remote ' . strval($repair['remote'] ?? '') . ')';
+            }
+        }
+
+        return $lines;
+    }
+
+    public function historyFindListenerRemote($type, $item, $listenerApp, $path)
+    {
+        global $mediaApps;
+
+        $platform = intval($listenerApp['platform'] ?? 0);
+        if (!$mediaApps->isOnline($listenerApp)) {
+            return '';
+        }
+
+        $pathKey = $this->database->pathSlashlessKey($path);
+        if ($type == 'movie') {
+            $items = $mediaApps->getItems($listenerApp, []);
+            foreach ($items['movies'] ?? [] as $live) {
+                $livePath = $this->database->normalizeLibraryPath($live['path'] ?? '');
+                if (
+                    $livePath != '' && (
+                        strcasecmp($livePath, $path) == 0
+                        || ($pathKey != '' && $this->database->pathSlashlessKey($livePath) == $pathKey)
+                    )
+                ) {
+                    return trim(strval($live['remote_id'] ?? ''));
+                }
+            }
+
+            return '';
+        }
+
+        $episode = $this->database->getEpisode(intval($item['id'] ?? 0));
+        if (!$episode) {
+            return '';
+        }
+        $season       = intval($episode['season'] ?? 0);
+        $epnum        = intval($episode['episode'] ?? 0);
+        $series       = $this->database->getSeries(intval($episode['series_id'] ?? 0));
+        $flag         = $this->database->mediaLibraryFlag($platform);
+        $field        = $this->database->mediaLibraryRemoteField($platform);
+        $seriesRemote = '';
+        if ($series) {
+            if (intval($series[$flag] ?? 0) && trim(strval($series[$field] ?? '')) != '') {
+                $seriesRemote = trim(strval($series[$field]));
+            }
+        }
+        if ($seriesRemote == '') {
+            return '';
+        }
+
+        $items  = $mediaApps->getItems($listenerApp, [], [
+            'remote_id' => $seriesRemote,
+            'title'     => strval($series['title'] ?? ''),
+        ]);
+        $byCode = [];
+        foreach ($items['episodes'] ?? [] as $live) {
+            $livePath = $this->database->normalizeLibraryPath($live['path'] ?? '');
+            if (
+                $livePath != '' && (
+                    strcasecmp($livePath, $path) == 0
+                    || ($pathKey != '' && $this->database->pathSlashlessKey($livePath) == $pathKey)
+                )
+            ) {
+                return trim(strval($live['remote_id'] ?? ''));
+            }
+            if (intval($live['season'] ?? 0) == $season && intval($live['episode'] ?? 0) == $epnum) {
+                $byCode = $live;
+            }
+        }
+        if ($byCode) {
+            return trim(strval($byCode['remote_id'] ?? ''));
+        }
+
+        return '';
     }
 
     public function syncWatchUser($members, $index, $both, $dry, $debug, &$dbRows, &$pushRows, &$dryPlans, &$drySkips)
@@ -285,15 +554,23 @@ trait History
             $member['user']                = $user;
             $existing[intval($user['id'])] = $state;
 
-            $status   = $mediaApps->getWatchStatus($app, $user['remote_id'], $name, $user['id'], $user);
-            $platform = intval($app['platform']);
-            foreach (['movies' => 'movie', 'episodes' => 'episode'] as $bucket => $kind) {
+            $status                 = $mediaApps->getWatchStatus($app, $user['remote_id'], $name, $user['id'], $user);
+            $platform               = intval($app['platform']);
+            $member['watch_error']  = !empty($status['error']);
+            $member['watch_remote'] = [
+                'movie'   => $status['movies'] ?? [],
+                'episode' => $status['episodes'] ?? [],
+            ];
+            foreach (['movies' => 'movie', 'episodes' => 'episode'] as $bucket => $type) {
                 foreach ($status[$bucket] ?? [] as $remoteId => $watch) {
-                    $item = $index[$kind]['remote'][$platform][strval($remoteId)] ?? [];
+                    if (!is_array($watch)) {
+                        continue;
+                    }
+                    $item = $index[$type]['remote'][$platform][strval($remoteId)] ?? [];
                     if (!$item) {
                         continue;
                     }
-                    $key       = $kind . ':' . intval($item['id']);
+                    $key       = $type . ':' . intval($item['id']);
                     $sourceKey = intval($app['id']) . ':' . intval($user['id']);
                     $watch     = [
                         'started'    => intval($watch['started'] ?? 0) ? 1 : 0,
@@ -302,7 +579,7 @@ trait History
                     ];
                     if (empty($incoming[$key]['sources'][$sourceKey])) {
                         $incoming[$key]['item']                = $item;
-                        $incoming[$key]['kind']                = $kind;
+                        $incoming[$key]['type']                = $type;
                         $incoming[$key]['sources'][$sourceKey] = $watch;
                     } else {
                         $incoming[$key]['sources'][$sourceKey] = mergeWatchState($incoming[$key]['sources'][$sourceKey], $watch);
@@ -314,13 +591,13 @@ trait History
         unset($member);
 
         $counts = [];
-        foreach ($incoming as $itemIncoming) {
+        foreach ($incoming as $incomingKey => $itemIncoming) {
             $this->stopIfCancelled();
-            $kind   = $itemIncoming['kind'];
+            $type   = $itemIncoming['type'];
             $item   = $itemIncoming['item'];
             $merged = [];
             foreach ($members as $member) {
-                $row = $existing[intval($member['user']['id'])][$kind][intval($item['id'])] ?? [];
+                $row = $existing[intval($member['user']['id'])][$type][intval($item['id'])] ?? [];
                 if ($row) {
                     $merged = mergeWatchState($merged, $row);
                 }
@@ -354,19 +631,30 @@ trait History
                         'episodes_progress' => 0,
                         'unchanged'         => 0,
                         'skipped'           => 0,
+                        'cleared'           => 0,
+                        'cascade_pushed'    => 0,
                     ];
+                }
+                if ($remote == '' || empty($item['flag'][$platform])) {
+                    $repaired = $this->historyRepairUnlinkedItem($type, $item, $app, $index);
+                    if ($repaired) {
+                        $item                           = $repaired;
+                        $incoming[$incomingKey]['item'] = $repaired;
+                        $remote                         = trim(strval($item['remote'][$platform] ?? ''));
+                    }
                 }
                 if ($remote == '' || empty($item['flag'][$platform])) {
                     if (!watchStateSatisfies($gathered ?? [], $merged)) {
                         $counts[$countKey]['skipped']++;
                         if ($dry) {
                             $drySkips[] = [
-                                'kind'    => $kind,
+                                'type'    => $type,
                                 'item_id' => intval($item['id']),
                                 'label'   => $item['label'],
                                 'app'     => $app,
                                 'user'    => $user,
                                 'watch'   => $merged,
+                                'library' => $library,
                                 'reason'  => 'not linked on this app library in Watchsync',
                             ];
                         }
@@ -374,30 +662,39 @@ trait History
                     continue;
                 }
 
-                $row       = $existing[$userId][$kind][intval($item['id'])] ?? [];
+                if (
+                    intval($app['role'] ?? 0) == MediaAppRoles::MASTER
+                    && empty($member['watch_error'])
+                    && $gathered == null
+                    && !array_key_exists(strval($remote), $member['watch_remote'][$type] ?? [])
+                ) {
+                    continue;
+                }
+
+                $row       = $existing[$userId][$type][intval($item['id'])] ?? [];
                 $dbChanged = !$row || !watchStatesEqual($row, $merged);
                 $needsPush = $both && !watchStateSatisfies($gathered ?? [], $merged);
                 if ($dbChanged && !$dry) {
-                    $saved                                         = $kind == 'movie'
+                    $saved                                         = $type == 'movie'
                         ? $this->database->saveUserMovieLink($row, $item['id'], $userId, $platform, $merged['started'], $merged['inprogress'], $merged['finished'])
                         : $this->database->saveUserEpisodeLink($row, $item['id'], $userId, $platform, $merged['started'], $merged['inprogress'], $merged['finished']);
-                    $existing[$userId][$kind][intval($item['id'])] = [
+                    $existing[$userId][$type][intval($item['id'])] = [
                         'id'         => intval($saved['id'] ?? 0),
                         'item_id'    => intval($item['id']),
                         'started'    => intval($merged['started'] ?? 0),
                         'inprogress' => intval($merged['inprogress'] ?? 0),
                         'finished'   => intval($merged['finished'] ?? 0),
                     ];
-                    $this->logWatchSetAction($kind, intval($item['id']), $merged, $user['username'] ?? '', $app['name'] ?? '', APP_NAME, false);
+                    $this->logWatchSetAction($type, intval($item['id']), $merged, $user['username'] ?? '', $app['name'] ?? '', APP_NAME, false);
                 }
                 if ($needsPush && !$dry) {
-                    $this->logWatchSetAction($kind, intval($item['id']), $merged, $user['username'] ?? '', APP_NAME, $app['name'] ?? '', false);
+                    $this->logWatchSetAction($type, intval($item['id']), $merged, $user['username'] ?? '', APP_NAME, $app['name'] ?? '', false);
                     $mediaApps->setWatchStatus($app, $user, $remote, $merged['started'], $merged['inprogress'], $merged['finished']);
                     $this->addStat('pushed', 1, $app);
                 }
                 if ($dry && ($dbChanged || $needsPush)) {
                     $dryPlans[] = [
-                        'kind'       => $kind,
+                        'type'       => $type,
                         'item_id'    => intval($item['id']),
                         'label'      => $item['label'],
                         'app'        => $app,
@@ -414,11 +711,11 @@ trait History
                 }
                 if (!$dbChanged) {
                     $counts[$countKey]['unchanged']++;
-                    $this->addHistoryResult($app, $user['username'] ?? '', $kind, 'unchanged');
+                    $this->addHistoryResult($app, $user['username'] ?? '', $type, 'unchanged');
                     $this->addStat('unchanged', 1, $app);
                 } else {
-                    $this->addHistoryResult($app, $user['username'] ?? '', $kind, $status);
-                    if ($kind == 'movie') {
+                    $this->addHistoryResult($app, $user['username'] ?? '', $type, $status);
+                    if ($type == 'movie') {
                         $counts[$countKey][$status == 'finished' ? 'movies_finished' : 'movies_progress']++;
                     } else {
                         $counts[$countKey][$status == 'finished' ? 'episodes_finished' : 'episodes_progress']++;
@@ -428,20 +725,22 @@ trait History
                 $summaryKey = strval($app['name'] ?? '') . "\0" . $this->appRoleLabel($app) . "\0" . strval($user['username'] ?? '');
                 $dbRows     = $this->historySummaryRow($dbRows, $summaryKey, $app['name'] ?? '', $this->appRoleLabel($app), $user['username'] ?? '', true);
                 if ($dbChanged) {
-                    $dbRows[$summaryKey][$this->historyChangeColumn($kind, $merged)]++;
+                    $dbRows[$summaryKey][$this->historyChangeColumn($type, $merged)]++;
                 } else {
                     $dbRows[$summaryKey][7]++;
                 }
                 if ($both) {
                     $pushRows = $this->historySummaryRow($pushRows, $summaryKey, $app['name'] ?? '', $this->appRoleLabel($app), $user['username'] ?? '', false);
                     if ($needsPush) {
-                        $pushRows[$summaryKey][$this->historyChangeColumn($kind, $merged)]++;
+                        $pushRows[$summaryKey][$this->historyChangeColumn($type, $merged)]++;
                     } else {
                         $pushRows[$summaryKey][7]++;
                     }
                 }
             }
         }
+
+        $this->clearAbsentLocalWatchLinks($members, $index, $existing, $incoming, $dry, $debug, $dbRows, $pushRows, $dryPlans, $counts);
 
         if (!$debug) {
             foreach ($counts as $count) {
@@ -451,20 +750,324 @@ trait History
                     . ' episodes finished=' . $count['episodes_finished']
                     . ' in progress=' . $count['episodes_progress']
                     . ' unchanged=' . $count['unchanged']
-                    . ' skipped=' . $count['skipped']);
+                    . ' skipped=' . $count['skipped']
+                    . ' cleared=' . intval($count['cleared'] ?? 0)
+                    . ' cascade_pushed=' . intval($count['cascade_pushed'] ?? 0));
                 loggerFlush($this->logfile);
             }
         }
     }
 
-    public function dryRunItemLabel($kind, $itemId)
+    public function clearAbsentLocalWatchLinks($members, $index, &$existing, $incoming, $dry, $debug, &$dbRows, &$pushRows, &$dryPlans, &$counts)
     {
-        $item = $this->sidecar['watch_index'][$kind]['id'][intval($itemId)] ?? [];
+        $ordered = $members;
+        usort($ordered, function ($a, $b) {
+            $aMaster = intval($a['app']['role'] ?? 0) == MediaAppRoles::MASTER ? 0 : 1;
+            $bMaster = intval($b['app']['role'] ?? 0) == MediaAppRoles::MASTER ? 0 : 1;
+
+            return $aMaster <=> $bMaster;
+        });
+
+        foreach ($ordered as $member) {
+            $this->stopIfCancelled();
+            $app  = $member['app'];
+            $user = $member['user'];
+            if (!empty($member['watch_error'])) {
+                logger($this->logfile, strval($app['name'] ?? '') . ' / ' . strval($user['username'] ?? '')
+                    . ' skip local clear: watch pull not authoritative');
+                loggerFlush($this->logfile);
+                continue;
+            }
+
+            $userId   = intval($user['id'] ?? 0);
+            $platform = intval($app['platform'] ?? 0);
+            $isMaster = intval($app['role'] ?? 0) == MediaAppRoles::MASTER;
+            if (!$userId || !$platform) {
+                continue;
+            }
+
+            $sourceKey  = intval($app['id']) . ':' . $userId;
+            $remoteMaps = $member['watch_remote'] ?? ['movie' => [], 'episode' => []];
+            $clearedN   = 0;
+            $cascadeN   = 0;
+            foreach (['movie', 'episode'] as $type) {
+                foreach ($existing[$userId][$type] ?? [] as $itemId => $row) {
+                    $this->stopIfCancelled();
+                    $itemId = intval($itemId);
+                    if (!$itemId) {
+                        continue;
+                    }
+                    if (!intval($row['started'] ?? 0) && !intval($row['finished'] ?? 0) && !intval($row['inprogress'] ?? 0)) {
+                        continue;
+                    }
+
+                    $incomingKey = $type . ':' . $itemId;
+                    if (!empty($incoming[$incomingKey]['sources'][$sourceKey])) {
+                        continue;
+                    }
+                    if (!$isMaster && !empty($incoming[$incomingKey]['sources'])) {
+                        continue;
+                    }
+
+                    $item   = $index[$type]['id'][$itemId] ?? [];
+                    $remote = trim(strval($item['remote'][$platform] ?? ''));
+                    $linked = !empty($item['flag'][$platform]) && $remote != '';
+                    if ($linked) {
+                        $map = $remoteMaps[$type] ?? [];
+                        if (array_key_exists($remote, $map) || array_key_exists(strval($remote), $map)) {
+                            continue;
+                        }
+                    }
+
+                    $cleared = ['started' => 0, 'inprogress' => 0, 'finished' => 0];
+                    $this->recordAbsentLocalClear(
+                        $type,
+                        $itemId,
+                        $item,
+                        $row,
+                        $app,
+                        $user,
+                        $cleared,
+                        $dry,
+                        $existing,
+                        $dbRows,
+                        $dryPlans,
+                        $counts,
+                        $clearedN,
+                    );
+
+                    if ($isMaster) {
+                        $cascadeN += $this->cascadeMasterAbsentClearToListeners(
+                            $members,
+                            $index,
+                            $type,
+                            $itemId,
+                            $item,
+                            $cleared,
+                            $dry,
+                            $existing,
+                            $dbRows,
+                            $pushRows,
+                            $dryPlans,
+                            $counts,
+                        );
+                    }
+                }
+            }
+            logger($this->logfile, strval($app['name'] ?? '') . ' / ' . strval($user['username'] ?? '')
+                . ' local absent cleared=' . $clearedN
+                . ' cascade_pushed=' . $cascadeN
+                . ' remote movies=' . count($remoteMaps['movie'] ?? [])
+                . ' episodes=' . count($remoteMaps['episode'] ?? []));
+            loggerFlush($this->logfile);
+        }
+    }
+
+    public function recordAbsentLocalClear($type, $itemId, $item, $row, $app, $user, $cleared, $dry, &$existing, &$dbRows, &$dryPlans, &$counts, &$clearedN)
+    {
+        $userId  = intval($user['id'] ?? 0);
+        $library = $this->watchLibraryTitle($this->sidecar['watch_index']['libraries'][intval($app['id'])] ?? [], $item['path'] ?? '');
+        if ($library == '') {
+            $library = strval($app['name'] ?? '');
+        }
+        $countKey = intval($app['id']) . "\0" . $library . "\0" . strval($user['username'] ?? '');
+        if (empty($counts[$countKey])) {
+            $counts[$countKey] = [
+                'app'               => $app,
+                'library'           => $library,
+                'user'              => strval($user['username'] ?? ''),
+                'role'              => $this->appRoleLabel($app),
+                'movies_finished'   => 0,
+                'movies_progress'   => 0,
+                'episodes_finished' => 0,
+                'episodes_progress' => 0,
+                'unchanged'         => 0,
+                'skipped'           => 0,
+                'cleared'           => 0,
+                'cascade_pushed'    => 0,
+            ];
+        }
+        $counts[$countKey]['cleared']++;
+        $clearedN++;
+
+        if ($dry) {
+            $platform   = intval($app['platform'] ?? 0);
+            $remote     = trim(strval($item['remote'][$platform] ?? ''));
+            $dryPlans[] = [
+                'type'       => $type,
+                'item_id'    => $itemId,
+                'label'      => $item['label'] ?? '',
+                'app'        => $app,
+                'user'       => $user,
+                'watch'      => $cleared,
+                'db_changed' => true,
+                'needs_push' => false,
+                'cleared'    => true,
+                'misplaced'  => !empty($item['misplaced']),
+                'unlinked'   => empty($item['flag'][$platform]) || $remote == '',
+            ];
+
+            return;
+        }
+
+        $linkId = intval($row['id'] ?? 0);
+        if ($type == 'movie') {
+            if ($linkId) {
+                $this->database->deleteUserMovieLinkById($linkId);
+            }
+        } else if ($linkId) {
+            $this->database->deleteUserEpisodeLinkById($linkId);
+        }
+        unset($existing[$userId][$type][$itemId]);
+        $this->addHistoryResult($app, $user['username'] ?? '', $type, 'cleared');
+        $this->addStat('cleared', 1, $app);
+
+        $summaryKey = strval($app['name'] ?? '') . "\0" . $this->appRoleLabel($app) . "\0" . strval($user['username'] ?? '');
+        $dbRows     = $this->historySummaryRow($dbRows, $summaryKey, $app['name'] ?? '', $this->appRoleLabel($app), $user['username'] ?? '', true);
+        $dbRows[$summaryKey][$this->historyChangeColumn($type, ['finished' => 0, 'inprogress' => 1])]++;
+    }
+
+    public function cascadeMasterAbsentClearToListeners($members, $index, $type, $itemId, $item, $cleared, $dry, &$existing, &$dbRows, &$pushRows, &$dryPlans, &$counts)
+    {
+        global $mediaApps;
+
+        $pushed = 0;
+        foreach ($members as $member) {
+            $this->stopIfCancelled();
+            $app = $member['app'];
+            if (intval($app['role'] ?? 0) == MediaAppRoles::MASTER) {
+                continue;
+            }
+
+            $user     = $member['user'];
+            $userId   = intval($user['id'] ?? 0);
+            $platform = intval($app['platform'] ?? 0);
+            if (!$userId || !$platform) {
+                continue;
+            }
+
+            $remote = trim(strval($item['remote'][$platform] ?? ''));
+            if ($remote == '' || empty($item['flag'][$platform])) {
+                continue;
+            }
+
+            $row = $existing[$userId][$type][$itemId] ?? [];
+            if ($row && (intval($row['started'] ?? 0) || intval($row['finished'] ?? 0) || intval($row['inprogress'] ?? 0))) {
+                $ignored = 0;
+                $this->recordAbsentLocalClear($type, $itemId, $item, $row, $app, $user, $cleared, $dry, $existing, $dbRows, $dryPlans, $counts, $ignored);
+            }
+
+            $library = $this->watchLibraryTitle($index['libraries'][intval($app['id'])] ?? [], $item['path'] ?? '');
+            if ($library == '') {
+                $library = strval($app['name'] ?? '');
+            }
+            $countKey = intval($app['id']) . "\0" . $library . "\0" . strval($user['username'] ?? '');
+            if (empty($counts[$countKey])) {
+                $counts[$countKey] = [
+                    'app'               => $app,
+                    'library'           => $library,
+                    'user'              => strval($user['username'] ?? ''),
+                    'role'              => $this->appRoleLabel($app),
+                    'movies_finished'   => 0,
+                    'movies_progress'   => 0,
+                    'episodes_finished' => 0,
+                    'episodes_progress' => 0,
+                    'unchanged'         => 0,
+                    'skipped'           => 0,
+                    'cleared'           => 0,
+                    'cascade_pushed'    => 0,
+                ];
+            }
+            $counts[$countKey]['cascade_pushed'] = intval($counts[$countKey]['cascade_pushed'] ?? 0) + 1;
+            $pushed++;
+
+            if ($dry) {
+                $dryPlans[] = [
+                    'type'         => $type,
+                    'item_id'      => $itemId,
+                    'label'        => $item['label'] ?? '',
+                    'app'          => $app,
+                    'user'         => $user,
+                    'watch'        => $cleared,
+                    'db_changed'   => false,
+                    'needs_push'   => true,
+                    'cleared'      => true,
+                    'cascade_push' => true,
+                ];
+                continue;
+            }
+
+            $mediaApps->setWatchStatus($app, $user, $remote, 0, 0, 0);
+            $this->addStat('pushed', 1, $app);
+            $this->addHistoryResult($app, $user['username'] ?? '', $type, 'cascadeCleared');
+
+            $summaryKey = strval($app['name'] ?? '') . "\0" . $this->appRoleLabel($app) . "\0" . strval($user['username'] ?? '');
+            $pushRows   = $this->historySummaryRow($pushRows, $summaryKey, $app['name'] ?? '', $this->appRoleLabel($app), $user['username'] ?? '', false);
+            $pushRows[$summaryKey][$this->historyChangeColumn($type, ['finished' => 0, 'inprogress' => 1])]++;
+        }
+
+        return $pushed;
+    }
+
+    public function dryRunItemLabel($type, $itemId)
+    {
+        $item = $this->sidecar['watch_index'][$type]['id'][intval($itemId)] ?? [];
         if (!empty($item['label'])) {
             return $item['label'];
         }
 
-        return ($kind == 'movie' ? 'movie #' : 'episode #') . intval($itemId);
+        return ($type == 'movie' ? 'movie #' : 'episode #') . intval($itemId);
+    }
+
+    public function dryRunSkipLine($skip)
+    {
+        $type    = ($skip['type'] ?? '') == 'movie' ? 'movie' : 'episode';
+        $itemId  = intval($skip['item_id'] ?? 0);
+        $app     = strval($skip['app']['name'] ?? '');
+        $role    = $this->appRoleLabel($skip['app'] ?? []);
+        $user    = strval($skip['user']['username'] ?? '');
+        $library = trim(strval($skip['library'] ?? ''));
+        $reason  = trim(strval($skip['reason'] ?? 'unavailable'));
+        $parts   = [
+            'User=' . $user,
+            'Media App=' . $app,
+            'Role=' . $role,
+        ];
+        if ($library != '') {
+            $parts[] = 'Library=' . $library;
+        }
+
+        if ($type == 'movie') {
+            $movie   = $itemId ? $this->database->getMovie($itemId) : [];
+            $title   = trim(strval($movie['title'] ?? ($skip['label'] ?? '')));
+            $year    = intval($movie['year'] ?? 0);
+            $parts[] = 'Movie=' . ($title != '' ? $title : ('#' . $itemId));
+            if ($year > 0) {
+                $parts[] = 'Year=' . $year;
+            }
+        } else {
+            $episode = $itemId ? $this->database->getEpisode($itemId) : [];
+            $series  = $episode ? $this->database->getSeries(intval($episode['series_id'] ?? 0)) : [];
+            $show    = trim(strval($series['title'] ?? ''));
+            $season  = intval($episode['season'] ?? 0);
+            $epnum   = intval($episode['episode'] ?? 0);
+            $title   = trim(strval($episode['title'] ?? ''));
+            if ($show == '' && !empty($skip['label'])) {
+                if (preg_match('/^(.*?)\s+S\d+E\d+/i', strval($skip['label']), $match)) {
+                    $show = trim($match[1]);
+                }
+            }
+            $parts[] = 'Series=' . ($show != '' ? $show : ('#' . intval($episode['series_id'] ?? 0)));
+            $parts[] = 'Episode=S' . str_pad(strval($season), 2, '0', STR_PAD_LEFT)
+                . 'E' . str_pad(strval($epnum), 2, '0', STR_PAD_LEFT);
+            if ($title != '') {
+                $parts[] = 'Title=' . $title;
+            }
+        }
+        $parts[] = 'ItemId=' . $itemId;
+        $parts[] = 'Reason=' . $reason;
+
+        return 'Skipped ' . implode(' | ', $parts);
     }
 
     public function dryRunWatchLabel($watch)
@@ -491,7 +1094,7 @@ trait History
         return 'not watched';
     }
 
-    public function logWatchSetAction($kind, $itemId, $watch, $username = '', $fromApp = '', $toApp = '', $unchanged = false)
+    public function logWatchSetAction($type, $itemId, $watch, $username = '', $fromApp = '', $toApp = '', $unchanged = false)
     {
         if (!$this->isDebugLog()) {
             return;
@@ -504,7 +1107,7 @@ trait History
             return;
         }
 
-        $label = $this->dryRunItemLabel($kind, $itemId);
+        $label = $this->dryRunItemLabel($type, $itemId);
         if ($unchanged) {
             $media = $label . ' no changes found';
         } else if ($finished > 0) {
@@ -543,31 +1146,36 @@ trait History
             $app      = $plan['app']['name'] ?? '';
             $role     = $this->appRoleLabel($plan['app']);
             $user     = $plan['user']['username'] ?? '';
-            $labelKey = ($plan['kind'] ?? '') . ':' . intval($plan['item_id'] ?? 0);
+            $labelKey = ($plan['type'] ?? '') . ':' . intval($plan['item_id'] ?? 0);
             if (!isset($labels[$labelKey])) {
-                $labels[$labelKey] = $this->dryRunItemLabel($plan['kind'] ?? '', intval($plan['item_id'] ?? 0));
+                $labels[$labelKey] = $this->dryRunItemLabel($plan['type'] ?? '', intval($plan['item_id'] ?? 0));
             }
             $itemLabel  = $labels[$labelKey];
             $watchLabel = $this->dryRunWatchLabel($plan['watch'] ?? []);
 
             if (!empty($plan['db_changed'])) {
-                $changeLines[] = 'Save to Watchsync for ' . $user . ' on ' . $app . ' (' . $role . '): set ' . $itemLabel . ' to ' . $watchLabel;
+                if (!empty($plan['cleared'])) {
+                    if (!empty($plan['misplaced'])) {
+                        $changeLines[] = 'Remove from Watchsync for ' . $user . ' on ' . $app . ' (' . $role . '): clear ' . $itemLabel . ' (episode path under wrong series)';
+                    } else if (!empty($plan['unlinked'])) {
+                        $changeLines[] = 'Remove from Watchsync for ' . $user . ' on ' . $app . ' (' . $role . '): clear ' . $itemLabel . ' (no longer linked on this app)';
+                    } else {
+                        $changeLines[] = 'Remove from Watchsync for ' . $user . ' on ' . $app . ' (' . $role . '): clear ' . $itemLabel . ' (absent from remote history)';
+                    }
+                } else {
+                    $changeLines[] = 'Save to Watchsync for ' . $user . ' on ' . $app . ' (' . $role . '): set ' . $itemLabel . ' to ' . $watchLabel;
+                }
             }
 
-            if ($mode == MediaSyncModes::BOTH && !empty($plan['needs_push'])) {
+            if (!empty($plan['cascade_push'])) {
+                $changeLines[] = 'Push clear to ' . $app . ' (' . $role . ') for ' . $user . ': clear ' . $itemLabel . ' (absent from main source)';
+            } else if ($mode == MediaSyncModes::BOTH && !empty($plan['needs_push'])) {
                 $changeLines[] = 'Push to ' . $app . ' (' . $role . ') for ' . $user . ': set ' . $itemLabel . ' to ' . $watchLabel;
             }
         }
 
         foreach ($skips as $skip) {
-            $labelKey = ($skip['kind'] ?? '') . ':' . intval($skip['item_id'] ?? 0);
-            if (!isset($labels[$labelKey])) {
-                $labels[$labelKey] = $this->dryRunItemLabel($skip['kind'] ?? '', intval($skip['item_id'] ?? 0));
-            }
-            $app         = $skip['app']['name'] ?? '';
-            $role        = $this->appRoleLabel($skip['app'] ?? []);
-            $user        = $skip['user']['username'] ?? '';
-            $skipLines[] = 'Skipped ' . $labels[$labelKey] . ' for ' . $user . ' on ' . $app . ' (' . $role . '): ' . ($skip['reason'] ?? 'unavailable');
+            $skipLines[] = $this->dryRunSkipLine($skip);
         }
 
         $lines   = [];
@@ -579,8 +1187,14 @@ trait History
         foreach ($this->syncSummarySettingLines() as $line) {
             $lines[] = $line;
         }
-        $lines[] = '';
-        $lines[] = 'No changes were written to Watchsync or any media app.';
+        $lines[]     = '';
+        $repairLines = $this->historyLibraryRepairLines();
+        if ($repairLines) {
+            $lines[] = 'Watch/history changes were not written to media apps.';
+            $lines[] = 'Library path/link repairs listed below were applied to Watchsync.';
+        } else {
+            $lines[] = 'No changes were written to Watchsync or any media app.';
+        }
         $lines[] = '';
         $lines[] = 'CHANGES';
         if (!$changeLines) {
@@ -588,6 +1202,13 @@ trait History
         } else {
             foreach ($changeLines as $changeLine) {
                 $lines[] = '- ' . $changeLine;
+            }
+        }
+        if ($repairLines) {
+            $lines[] = '';
+            $lines[] = 'LIBRARY UPDATES (path check / listener link)';
+            foreach ($repairLines as $repairLine) {
+                $lines[] = '- ' . $repairLine;
             }
         }
         if ($skipLines) {
@@ -604,9 +1225,9 @@ trait History
             $lines[] = $line;
         }
 
-        if ($mode == MediaSyncModes::BOTH) {
+        if ($mode == MediaSyncModes::BOTH || $tables['pushRows']) {
             $lines[] = '';
-            $lines[] = 'APP PUSHES (writes to main source / listeners)';
+            $lines[] = 'APP PUSHES (writes to listeners for main-source absences' . ($mode == MediaSyncModes::BOTH ? ' / normal both-mode sync' : '') . ')';
             foreach (asciiTable($this->historyTableHeaders(false), $tables['pushRows']) as $line) {
                 $lines[] = $line;
             }
@@ -634,10 +1255,10 @@ trait History
         return $headers;
     }
 
-    public function historyChangeColumn($kind, $watch)
+    public function historyChangeColumn($type, $watch)
     {
         $finished = intval($watch['finished'] ?? 0) > 0;
-        if (($kind ?? '') == 'movie') {
+        if (($type ?? '') == 'movie') {
             return $finished ? 3 : 4;
         }
 
@@ -673,7 +1294,15 @@ trait History
 
     public function storeHistorySummary($tables, $mode)
     {
-        $lines   = [];
+        $lines       = [];
+        $repairLines = $this->historyLibraryRepairLines();
+        if ($repairLines) {
+            $lines[] = '';
+            $lines[] = 'LIBRARY UPDATES (path check / listener link)';
+            foreach ($repairLines as $repairLine) {
+                $lines[] = '- ' . $repairLine;
+            }
+        }
         $lines[] = '';
         $lines[] = 'WATCHSTATE (Watchsync database updates)';
         foreach (asciiTable($this->historyTableHeaders(true), $tables['dbRows']) as $line) {
@@ -682,7 +1311,9 @@ trait History
 
         if (intval($mode) == MediaSyncModes::BOTH || $tables['pushRows']) {
             $lines[] = '';
-            $lines[] = 'APP PUSHES (writes to main source / listeners)';
+            $lines[] = 'APP PUSHES (listener clears for main-source absences'
+                . (intval($mode) == MediaSyncModes::BOTH ? ' / normal both-mode sync' : '')
+                . ')';
             foreach (asciiTable($this->historyTableHeaders(false), $tables['pushRows']) as $line) {
                 $lines[] = $line;
             }
@@ -702,7 +1333,14 @@ trait History
             $role   = $this->appRoleLabel($plan['app']);
             $user   = $plan['user']['username'] ?? '';
             $key    = $app . "\0" . $role . "\0" . $user;
-            $column = $this->historyChangeColumn($plan['kind'] ?? '', $plan['watch'] ?? []);
+            $column = $this->historyChangeColumn($plan['type'] ?? '', $plan['watch'] ?? []);
+
+            if (!empty($plan['cascade_push'])) {
+                $pushRows = $this->historySummaryRow($pushRows, $key, $app, $role, $user, false);
+                $pushRows[$key][$column]++;
+                continue;
+            }
+
             $dbRows = $this->historySummaryRow($dbRows, $key, $app, $role, $user, true);
             if (!empty($plan['db_changed'])) {
                 $dbRows[$key][$column]++;
@@ -838,7 +1476,7 @@ trait History
                 $this->logHistoryMissingPin($change['app'] ?? [], $change['user'] ?? []);
                 continue;
             }
-            $this->logWatchSetAction($change['kind'] ?? '', intval($change['item_id'] ?? 0), [
+            $this->logWatchSetAction($change['type'] ?? '', intval($change['item_id'] ?? 0), [
                 'started'    => $change['started'] ?? 0,
                 'inprogress' => $change['inprogress'] ?? 0,
                 'finished'   => $change['finished'] ?? 0,
@@ -953,10 +1591,10 @@ trait History
                 $unchangedM   = 0;
                 $unchangedE   = 0;
                 $libraries    = [];
-                foreach (['movie' => 'movies', 'episode' => 'episodes'] as $kind => $bucket) {
-                    foreach ($state[$kind] as $itemId => $link) {
+                foreach (['movie' => 'movies', 'episode' => 'episodes'] as $type => $bucket) {
+                    foreach ($state[$type] as $itemId => $link) {
                         $this->stopIfCancelled();
-                        $item   = $index[$kind]['id'][intval($itemId)] ?? [];
+                        $item   = $index[$type]['id'][intval($itemId)] ?? [];
                         $remote = $item['remote'][$platform] ?? '';
                         if (!$item || empty($item['flag'][$platform]) || $remote == '') {
                             continue;
@@ -976,7 +1614,7 @@ trait History
                         }
                         if (watchStateSatisfies($status[$bucket][$remote] ?? [], $link)) {
                             $libraries[$library]['unchanged']++;
-                            if ($kind == 'movie') {
+                            if ($type == 'movie') {
                                 $unchangedM++;
                             } else {
                                 $unchangedE++;
@@ -984,26 +1622,26 @@ trait History
                             continue;
                         }
                         if (!$dry) {
-                            $this->logWatchSetAction($kind, intval($itemId), $link, $user['username'] ?? '', APP_NAME, $mediaApp['name'] ?? '');
+                            $this->logWatchSetAction($type, intval($itemId), $link, $user['username'] ?? '', APP_NAME, $mediaApp['name'] ?? '');
                             $mediaApps->setWatchStatus($mediaApp, $user, $remote, $link['started'], $link['inprogress'], $link['finished']);
                             $statusName = $this->watchResultStatus($link);
                             if ($statusName == '' || $statusName == 'started') {
                                 $statusName = 'inProgress';
                             }
-                            $this->addHistoryResult($mediaApp, $user['username'] ?? '', $kind, $statusName);
+                            $this->addHistoryResult($mediaApp, $user['username'] ?? '', $type, $statusName);
                         }
-                        $finishedKey = $kind == 'movie' ? 'movies_finished' : 'episodes_finished';
-                        $progressKey = $kind == 'movie' ? 'movies_progress' : 'episodes_progress';
+                        $finishedKey = $type == 'movie' ? 'movies_finished' : 'episodes_finished';
+                        $progressKey = $type == 'movie' ? 'movies_progress' : 'episodes_progress';
                         if (intval($link['finished'] ?? 0) > 0) {
                             $libraries[$library][$finishedKey]++;
-                            if ($kind == 'movie') {
+                            if ($type == 'movie') {
                                 $moviesFin++;
                             } else {
                                 $episodesFin++;
                             }
                         } else {
                             $libraries[$library][$progressKey]++;
-                            if ($kind == 'movie') {
+                            if ($type == 'movie') {
                                 $moviesProg++;
                             } else {
                                 $episodesProg++;

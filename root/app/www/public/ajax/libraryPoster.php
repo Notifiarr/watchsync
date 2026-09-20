@@ -28,20 +28,20 @@ if (IS_GUEST) {
     exit;
 }
 
-$kind = $_GET['kind'] ?? '';
-if ($kind != 'movie' && $kind != 'series') {
+$type = $_GET['type'] ?? '';
+if ($type != 'movie' && $type != 'series') {
     http_response_code(404);
     exit;
 }
 
 $id   = intval($_GET['id'] ?? 0);
-$file = $mediaApps->libraryPosterPath($kind, $id);
+$file = $mediaApps->libraryPosterPath($type, $id);
 if (!$id) {
     http_response_code(404);
     exit;
 }
 
-if ((!is_file($file) || !filesize($file)) && !$mediaApps->ensureLibraryPosterCached($kind, $id)) {
+if ((!is_file($file) || !filesize($file)) && !$mediaApps->ensureLibraryPosterCached($type, $id)) {
     http_response_code(404);
     exit;
 }
@@ -52,16 +52,16 @@ if ($bytes == false || $bytes == '') {
     exit;
 }
 
-$type = 'image/jpeg';
+$contentType = 'image/jpeg';
 if (str_starts_with($bytes, "\x89PNG")) {
-    $type = 'image/png';
+    $contentType = 'image/png';
 } else if (str_starts_with($bytes, 'GIF')) {
-    $type = 'image/gif';
+    $contentType = 'image/gif';
 } else if (str_starts_with($bytes, 'RIFF') && str_contains(substr($bytes, 0, 16), 'WEBP')) {
-    $type = 'image/webp';
+    $contentType = 'image/webp';
 }
 
-header('Content-Type: ' . $type);
+header('Content-Type: ' . $contentType);
 header('Content-Length: ' . strlen($bytes));
 header('Cache-Control: public, max-age=86400');
 echo $bytes;

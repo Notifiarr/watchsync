@@ -97,6 +97,20 @@ trait UserEpisodeLink
         ];
     }
 
+    public function deleteUserEpisodeLinkById($id)
+    {
+        $id = intval($id);
+        if (!$id) {
+            return 0;
+        }
+
+        $sql = "DELETE FROM " . USER_EPISODE_LINK_TABLE . "
+                WHERE id = " . $id;
+        $this->query($sql);
+
+        return $this->matchedRows();
+    }
+
     public function deleteUserEpisodeLinksByUserIds($userIds)
     {
         if (!$userIds) {

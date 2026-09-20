@@ -67,7 +67,7 @@ trait Notify
         return '';
     }
 
-    public function addHistoryResult($mediaApp, $username, $kind, $status, $amount = 1)
+    public function addHistoryResult($mediaApp, $username, $type, $status, $amount = 1)
     {
         $name     = $this->statAppName($mediaApp);
         $username = trim(strval($username));
@@ -77,32 +77,32 @@ trait Notify
             return;
         }
 
-        $kind = ($kind == 'episode' || $kind == 'episodes') ? 'episodes' : 'movies';
+        $type = ($type == 'episode' || $type == 'episodes') ? 'episodes' : 'movies';
         $this->ensureAppBuckets($name);
         if (!isset($this->sidecar['stats']['apps'][$name]['users'][$username]) || !is_array($this->sidecar['stats']['apps'][$name]['users'][$username])) {
             $this->sidecar['stats']['apps'][$name]['users'][$username] = [];
         }
-        if (!isset($this->sidecar['stats']['apps'][$name]['users'][$username][$kind]) || !is_array($this->sidecar['stats']['apps'][$name]['users'][$username][$kind])) {
-            $this->sidecar['stats']['apps'][$name]['users'][$username][$kind] = [];
+        if (!isset($this->sidecar['stats']['apps'][$name]['users'][$username][$type]) || !is_array($this->sidecar['stats']['apps'][$name]['users'][$username][$type])) {
+            $this->sidecar['stats']['apps'][$name]['users'][$username][$type] = [];
         }
-        $this->sidecar['stats']['apps'][$name]['users'][$username][$kind][$status] = intval($this->sidecar['stats']['apps'][$name]['users'][$username][$kind][$status] ?? 0) + $amount;
+        $this->sidecar['stats']['apps'][$name]['users'][$username][$type][$status] = intval($this->sidecar['stats']['apps'][$name]['users'][$username][$type][$status] ?? 0) + $amount;
     }
 
-    public function addLibraryResult($mediaApp, $kind, $action, $amount = 1)
+    public function addLibraryResult($mediaApp, $type, $action, $amount = 1)
     {
         $name   = $this->statAppName($mediaApp);
-        $kind   = trim(strval($kind));
+        $type   = trim(strval($type));
         $action = trim(strval($action));
         $amount = intval($amount);
-        if ($name == '' || $kind == '' || $action == '') {
+        if ($name == '' || $type == '' || $action == '') {
             return;
         }
 
         $this->ensureAppBuckets($name);
-        if (!isset($this->sidecar['stats']['apps'][$name]['media'][$kind]) || !is_array($this->sidecar['stats']['apps'][$name]['media'][$kind])) {
-            $this->sidecar['stats']['apps'][$name]['media'][$kind] = [];
+        if (!isset($this->sidecar['stats']['apps'][$name]['media'][$type]) || !is_array($this->sidecar['stats']['apps'][$name]['media'][$type])) {
+            $this->sidecar['stats']['apps'][$name]['media'][$type] = [];
         }
-        $this->sidecar['stats']['apps'][$name]['media'][$kind][$action] = intval($this->sidecar['stats']['apps'][$name]['media'][$kind][$action] ?? 0) + $amount;
+        $this->sidecar['stats']['apps'][$name]['media'][$type][$action] = intval($this->sidecar['stats']['apps'][$name]['media'][$type][$action] ?? 0) + $amount;
     }
 
     public function addParityResult($mediaApp, $group, $action, $label)
@@ -521,14 +521,14 @@ trait Notify
     {
         $rows  = [];
         $apps  = $this->sidecar['stats']['apps'] ?? [];
-        $kinds = ['movies', 'series', 'episodes'];
+        $types = ['movies', 'series', 'episodes'];
         if (!is_array($apps)) {
             return $rows;
         }
         foreach ($apps as $name => $appStats) {
             $media = is_array($appStats['media'] ?? null) ? $appStats['media'] : [];
-            foreach ($kinds as $kind) {
-                $bucket = $media[$kind] ?? null;
+            foreach ($types as $type) {
+                $bucket = $media[$type] ?? null;
                 if (!is_array($bucket) || array_keys($bucket) == range(0, count($bucket) - 1)) {
                     continue;
                 }
@@ -537,7 +537,7 @@ trait Notify
                 if (!$added && !$updated) {
                     continue;
                 }
-                $rows[] = [$name, ucfirst($kind), $added, $updated];
+                $rows[] = [$name, ucfirst($type), $added, $updated];
             }
         }
 

@@ -22,8 +22,13 @@ function loadClassTraits($traits)
 
 function dbPrepare($val)
 {
-    $val = addslashes(stripslashes($val));
-    return $val;
+    global $database;
+
+    if (isset($database) && is_object($database) && method_exists($database, 'prepare')) {
+        return $database->prepare($val);
+    }
+
+    return addslashes(strval($val));
 }
 
 function htmlEscape($value): string

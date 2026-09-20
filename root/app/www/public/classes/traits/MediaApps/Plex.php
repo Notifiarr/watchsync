@@ -277,12 +277,6 @@ trait Plex
         $items   = [];
         $start   = 0;
         $size    = 500;
-        $kind    = 'movies';
-        if (intval($type) == 2) {
-            $kind = 'series';
-        } else if (intval($type) == 4) {
-            $kind = 'episodes';
-        }
 
         while (true) {
             if (!empty($cron)) {
@@ -534,7 +528,22 @@ trait Plex
 
     public function plexItemPath($item)
     {
-        $media = $item['Media'] ?? [];
+        $candidates = $this->plexPathCandidates($item);
+        if (!$candidates) {
+            return '';
+        }
+
+        usort($candidates, function ($a, $b) {
+            return $this->plexPathCandidateScore($b) - $this->plexPathCandidateScore($a);
+        });
+
+        return strval($candidates[0]['file'] ?? '');
+    }
+
+    public function plexPathCandidates($item)
+    {
+        $candidates = [];
+        $media      = $item['Media'] ?? [];
         if ($media && !isset($media[0])) {
             $media = [$media];
         }
@@ -549,27 +558,89 @@ trait Plex
                 }
                 foreach ($parts as $part) {
                     $file = $this->plexValue($part, 'file');
-                    if ($file != '') {
-                        return $file;
+                    if ($file == '') {
+                        continue;
+                    }
+                    $candidates[] = [
+                        'file'       => $file,
+                        'accessible' => $this->plexValue($part, 'accessible'),
+                        'exists'     => $this->plexValue($part, 'exists'),
+                    ];
+                }
+            }
+        }
+
+        if (!$candidates) {
+            $locations = $item['Location'] ?? [];
+            if ($locations && !isset($locations[0])) {
+                $locations = [$locations];
+            }
+            if (is_array($locations)) {
+                foreach ($locations as $location) {
+                    $path = $this->plexValue($location, 'path');
+                    if ($path != '') {
+                        $candidates[] = [
+                            'file'       => $path,
+                            'accessible' => '',
+                            'exists'     => '',
+                        ];
                     }
                 }
             }
         }
 
-        $locations = $item['Location'] ?? [];
-        if ($locations && !isset($locations[0])) {
-            $locations = [$locations];
+        return $candidates;
+    }
+
+    public function plexPathCandidateScore($candidate)
+    {
+        $file       = strval($candidate['file'] ?? '');
+        $accessible = strval($candidate['accessible'] ?? '');
+        $exists     = strval($candidate['exists'] ?? '');
+        $score      = 0;
+
+        if ($accessible == '0') {
+            $score -= 100;
+        } else if ($accessible == '1') {
+            $score += 50;
         }
-        if (is_array($locations)) {
-            foreach ($locations as $location) {
-                $path = $this->plexValue($location, 'path');
-                if ($path != '') {
-                    return $path;
-                }
-            }
+        if ($exists == '0') {
+            $score -= 50;
+        } else if ($exists == '1') {
+            $score += 25;
+        }
+        if ($file != '' && !str_contains($file, '/') && !str_contains($file, '\\')) {
+            $score -= 40;
+        }
+        $slashCount  = substr_count(str_replace('\\', '/', $file), '/');
+        $score      += min($slashCount, 8);
+        if (preg_match('#[/\\\\]plex[/\\\\]#i', $file)) {
+            $score += 20;
         }
 
-        return '';
+        return $score;
+    }
+
+    public function plexResolvePathWithCheckFiles($url, $token, $remoteId)
+    {
+        $remoteId = trim(strval($remoteId));
+        if ($remoteId == '' || $url == '' || $token == '') {
+            return '';
+        }
+
+        $request   = sprintf(MediaAppEndpoints::ENDPOINT_PLEX_METADATA, rtrim($url, '/'), rawurlencode($remoteId));
+        $curl      = curl($request, $this->plexHeaders($token), 'GET');
+        $parsed    = $this->parsePlexResponse($curl);
+        $container = $parsed['MediaContainer'] ?? $parsed;
+        $rows      = $container['Metadata'] ?? ($container['Video'] ?? []);
+        if ($rows && !isset($rows[0])) {
+            $rows = [$rows];
+        }
+        if (!is_array($rows) || !$rows) {
+            return '';
+        }
+
+        return $this->plexItemPath($rows[0]);
     }
 
     public function plexGetWatchStatus($mediaApp, $remoteId, $username = '', $userId = 0, $user = [])
@@ -584,10 +655,11 @@ trait Plex
             }
         }
 
-        $userToken  = trim(strval($user['token'] ?? ''));
-        $missingPin = !empty($user['pin_required']) && trim(strval($user['pin'] ?? '')) == '';
-        $scopeKeys  = $this->historyLibraryKeys(intval($mediaApp['id'] ?? 0));
-        $status     = [];
+        $userToken   = trim(strval($user['token'] ?? ''));
+        $missingPin  = !empty($user['pin_required']) && trim(strval($user['pin'] ?? '')) == '';
+        $scopeKeys   = $this->historyLibraryKeys(intval($mediaApp['id'] ?? 0));
+        $status      = [];
+        $haveLibrary = false;
         if ($userToken != '' && !$missingPin) {
             $library = $this->plexGetWatchStatusFromLibrary($url, $userToken, $username, $scopeKeys);
             if (!empty($library['auth'])) {
@@ -596,7 +668,8 @@ trait Plex
                 }
                 $this->plexWatchLog('token rejected ' . ($username ?: $userId) . ', using history');
             } else if (empty($library['error'])) {
-                $status = [
+                $haveLibrary = true;
+                $status      = [
                     'movies'   => $library['movies'] ?? [],
                     'episodes' => $library['episodes'] ?? [],
                 ];
@@ -610,17 +683,21 @@ trait Plex
         unset($history['last_seen']);
         if (empty($status)) {
             $this->plexStoreUserLastSeen($userId, $lastSeen);
+
             return $history;
         }
 
         if (!$scopeKeys) {
-            foreach (['movies', 'episodes'] as $kind) {
-                foreach ($history[$kind] ?? [] as $itemId => $watch) {
-                    $status[$kind][$itemId] = mergeWatchState($status[$kind][$itemId] ?? [], $watch);
+            foreach (['movies', 'episodes'] as $type) {
+                foreach ($history[$type] ?? [] as $itemId => $watch) {
+                    $status[$type][$itemId] = mergeWatchState($status[$type][$itemId] ?? [], $watch);
                 }
             }
         }
         $this->plexStoreUserLastSeen($userId, $lastSeen);
+        if (!$haveLibrary) {
+            $status['error'] = true;
+        }
 
         return $status;
     }
@@ -739,10 +816,10 @@ trait Plex
             if ($scopeKeys && empty($scopeKeys[$key])) {
                 continue;
             }
-            $kinds           = $type == 'movie' ? [1] : [4];
+            $types           = $type == 'movie' ? [1] : [4];
             $sectionMovies   = 0;
             $sectionEpisodes = 0;
-            foreach ($kinds as $itemType) {
+            foreach ($types as $itemType) {
                 $section = $this->plexWatchSection($url, $token, $key, $itemType, $this->plexValue($directory, 'title'));
                 if (!empty($section['auth']) || !empty($section['error'])) {
                     return [
@@ -853,6 +930,8 @@ trait Plex
             'last_seen' => 0,
         ];
         if (!$accountId) {
+            $status['error'] = true;
+
             return $status;
         }
 
@@ -868,7 +947,19 @@ trait Plex
             if (!empty($cron)) {
                 $cron->stopIfCancelled();
             }
-            $curl      = curl(sprintf(MediaAppEndpoints::ENDPOINT_PLEX_HISTORY, $url, rawurlencode($accountId), $start, $size), $headers, 'GET');
+            $curl = curl(sprintf(MediaAppEndpoints::ENDPOINT_PLEX_HISTORY, $url, rawurlencode($accountId), $start, $size), $headers, 'GET');
+            $code = intval($curl['code'] ?? 0);
+            if ($code == 401 || $code == 403) {
+                $status['error'] = true;
+                $status['auth']  = true;
+
+                return $status;
+            }
+            if ($code > 0 && ($code < 200 || $code > 299)) {
+                $status['error'] = true;
+
+                return $status;
+            }
             $response  = $this->parsePlexResponse($curl);
             $container = $response['MediaContainer'] ?? $response;
             $found     = $container['Metadata'] ?? [];
@@ -1516,7 +1607,7 @@ trait Plex
             return ['ok' => false, 'rejected' => false];
         }
 
-        $isUuid = (bool) preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $userId);
+        $isUuid = preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $userId) == 1;
         $url    = $isUuid
             ? sprintf(MediaAppEndpoints::ENDPOINT_PLEX_TV_HOME_USER_SWITCH, rawurlencode($userId))
             : sprintf(MediaAppEndpoints::ENDPOINT_PLEX_TV_HOME_USER_SWITCH_ID, rawurlencode($userId));

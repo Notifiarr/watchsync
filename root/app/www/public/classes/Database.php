@@ -41,6 +41,7 @@ class Database
     protected $libraryLinksCache         = null;
     protected $appLibrariesCache         = [];
     protected $usersCache                = [];
+    protected $lastError                 = '';
 
     public function __construct()
     {
@@ -147,16 +148,35 @@ class Database
 
     public function query($sql)
     {
+        $this->lastError = '';
         if (!$this->db) {
+            $this->lastError = 'database not connected';
             return false;
         }
 
         try {
-            return mysqli_query($this->db, $sql);
+            $res = mysqli_query($this->db, $sql);
+            if ($res === false) {
+                $this->lastError = $this->error() ?: 'query failed';
+                logger(SYSTEM_LOG, 'MYSQL: Query failed: ' . $this->lastError);
+            }
+
+            return $res;
         } catch (Exception $e) {
-            logger(SYSTEM_LOG, 'MYSQL: Query failed: ' . $e->getMessage());
+            $this->lastError = $e->getMessage();
+            logger(SYSTEM_LOG, 'MYSQL: Query failed: ' . $this->lastError);
             return false;
         }
+    }
+
+    public function setLastError($message)
+    {
+        $this->lastError = trim(strval($message));
+    }
+
+    public function getLastError()
+    {
+        return strval($this->lastError ?? '');
     }
 
     public function fetchAssoc($res)
@@ -200,7 +220,8 @@ class Database
 
         logger(CRON_BACKUP_LOG, 'path=' . $dir);
 
-        $res = $this->query('SHOW TABLES');
+        $sql = 'SHOW TABLES';
+        $res = $this->query($sql);
         if (!$res) {
             logger(CRON_BACKUP_LOG, 'tables=failed error=' . $this->error());
             return false;
@@ -265,15 +286,18 @@ class Database
         }
         sort($files);
 
-        $this->query('SET FOREIGN_KEY_CHECKS=0');
-        $res = $this->query('SHOW TABLES');
+        $sql = 'SET FOREIGN_KEY_CHECKS=0';
+        $this->query($sql);
+        $sql = 'SHOW TABLES';
+        $res = $this->query($sql);
         if ($res) {
             while ($row = $this->fetchAssoc($res)) {
                 $table = reset($row);
                 if ($table == '') {
                     continue;
                 }
-                $this->query('DROP TABLE IF EXISTS `' . str_replace('`', '``', $table) . '`');
+                $sql = 'DROP TABLE IF EXISTS `' . str_replace('`', '``', $table) . '`';
+                $this->query($sql);
             }
         }
 
@@ -282,9 +306,11 @@ class Database
             $shell->exec($exec);
         }
 
-        $this->query('SET FOREIGN_KEY_CHECKS=1');
+        $sql = 'SET FOREIGN_KEY_CHECKS=1';
+        $this->query($sql);
 
-        $res = $this->query('SHOW TABLES');
+        $sql = 'SHOW TABLES';
+        $res = $this->query($sql);
         if (!$res) {
             return false;
         }
@@ -307,7 +333,12 @@ class Database
 
     public function prepare($val)
     {
-        return dbPrepare($val);
+        $val = strval($val);
+        if (isset($this->db) && $this->db instanceof mysqli) {
+            return mysqli_real_escape_string($this->db, $val);
+        }
+
+        return addslashes($val);
     }
 
     public function getNewestMigration()

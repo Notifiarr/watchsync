@@ -114,29 +114,50 @@ trait Accounts
         }
 
         $mediaApps->refreshUsers($master['id']);
-        if ($this->database->settingEnabled('syncParityAutoUsers')) {
-            $state   = $mediaApps->paritySyncState('user');
-            $changed = false;
-            foreach ($this->database->getMediaAppUsers($master['id']) as $user) {
-                $id = intval($user['id'] ?? 0);
-                if (!$id || $mediaApps->userIsDeleted($user) || $mediaApps->parityItemSelected('user', $id)) {
-                    continue;
+        if ($this->isAutomaticJob() && $this->database->settingEnabled('syncParityAutoUsers')) {
+            $state = $mediaApps->paritySyncState('user');
+            if ($state) {
+                $changed = false;
+                foreach ($this->database->getMediaAppUsers($master['id']) as $user) {
+                    $id = intval($user['id'] ?? 0);
+                    if (!$id || $mediaApps->userIsDeleted($user)) {
+                        continue;
+                    }
+                    $key = strval($id);
+                    if (array_key_exists($key, $state) || $this->database->getMediaAppUserLinks($id)) {
+                        continue;
+                    }
+                    $state[$key] = 1;
+                    $changed     = true;
                 }
-                if ($this->database->getMediaAppUserLinks($id)) {
-                    continue;
+                if ($changed) {
+                    $mediaApps->setParitySync('user', $state);
+                    $this->sidecar['user_ids'] = $mediaApps->selectedParityUserIds(false);
                 }
-                $state[strval($id)] = 1;
-                $changed            = true;
-            }
-            if ($changed) {
-                $mediaApps->setParitySync('user', $state);
             }
         }
+
         $selected = [];
-        foreach ($mediaApps->selectedParityUserIds(false) as $userId) {
-            $user = $this->database->getMediaAppUser($userId);
-            if ($user) {
-                $selected[] = $user;
+        $jobIds   = [];
+        foreach ($this->sidecar['user_ids'] ?? [] as $userId) {
+            $userId = intval($userId);
+            if ($userId) {
+                $jobIds[] = $userId;
+            }
+        }
+        if ($jobIds) {
+            foreach ($jobIds as $userId) {
+                $user = $this->database->getMediaAppUser($userId);
+                if ($user) {
+                    $selected[] = $user;
+                }
+            }
+        } else {
+            foreach ($mediaApps->selectedParityUserIds(false) as $userId) {
+                $user = $this->database->getMediaAppUser($userId);
+                if ($user) {
+                    $selected[] = $user;
+                }
             }
         }
         $keep = [];
@@ -146,7 +167,7 @@ trait Accounts
 
         logger($this->logfile, 'user sync master ' . $master['name'] . ' users=' . count($keep));
 
-        $automatic = intval($this->sidecar['trigger'] ?? 0) == MediaSyncTriggers::AUTOMATIC;
+        $automatic = $this->isAutomaticJob();
 
         foreach ($listeners as $listener) {
             $this->stopIfCancelled();

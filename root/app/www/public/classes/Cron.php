@@ -19,8 +19,9 @@ class Cron
     use Dispatcher;
 
     protected $database;
-    protected $logfile  = '';
-    protected $sidecar  = [];
+    protected $logfile            = '';
+    protected $sidecar            = [];
+    protected $libraryImportIndex = null;
 
     public function __construct()
     {
@@ -88,6 +89,16 @@ class Cron
             }
             logger($log, 'trigger=' . $triggerName);
             logger($log, 'dry_run=' . (!empty($this->sidecar['dry_run']) ? '1' : '0'));
+            $users = [];
+            foreach ($this->sidecar['users'] ?? [] as $user) {
+                $name = trim(strval($user));
+                if ($name != '') {
+                    $users[] = $name;
+                }
+            }
+            if ($users) {
+                logger($log, 'users=' . implode(',', $users));
+            }
             $historyLibraries = [];
             foreach ($this->sidecar['history_libraries'] ?? [] as $library) {
                 $key = strval($library['key'] ?? '');
@@ -163,7 +174,6 @@ class Cron
             }
             $this->sidecar['finished'] = time();
             $persist                   = true;
-            $this->writeJobHeader();
             if (($this->sidecar['status'] ?? '') == 'finished' && $this->shouldUpdateSyncSchedule($this->sidecar)) {
                 $this->setSyncLastFinished($this->jobLockType($this->sidecar), intval($this->sidecar['finished']));
             }
@@ -186,7 +196,6 @@ class Cron
                 }
             }
             if ($persist) {
-                $this->writeJobHeader();
                 $this->releaseLock();
             }
             if ($type != '') {
@@ -203,6 +212,10 @@ class Cron
                         $this->startQueuedJob($history);
                     }
                 }
+            }
+            loggerFlush($log);
+            if ($persist) {
+                $this->writeJobHeader();
             }
         }
     }
