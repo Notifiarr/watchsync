@@ -320,7 +320,7 @@ trait Notify
     public function syncHadChanges()
     {
         $stats = is_array($this->sidecar['stats'] ?? null) ? $this->sidecar['stats'] : [];
-        foreach (['changed', 'added', 'updated', 'pushed', 'created', 'linked', 'removed'] as $key) {
+        foreach (['changed', 'added', 'updated', 'pushed', 'created', 'linked', 'removed', 'passwords'] as $key) {
             if (intval($stats[$key] ?? 0) > 0) {
                 return true;
             }

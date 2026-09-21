@@ -105,6 +105,7 @@ interface MediaAppEndpoints
     public const ENDPOINT_EMBY_USERS                  = '%s/Users';
     public const ENDPOINT_EMBY_USER                   = '%s/Users/%s';
     public const ENDPOINT_EMBY_USER_NEW               = '%s/Users/New';
+    public const ENDPOINT_EMBY_USER_PASSWORD          = '%s/Users/%s/Password';
     public const ENDPOINT_EMBY_USER_POLICY            = '%s/Users/%s/Policy';
     public const ENDPOINT_EMBY_AUTH                   = '%s/Users/AuthenticateByName';
 
@@ -121,6 +122,9 @@ interface MediaAppEndpoints
     public const ENDPOINT_JELLYFIN_USERS             = '%s/Users';
     public const ENDPOINT_JELLYFIN_USER              = '%s/Users/%s';
     public const ENDPOINT_JELLYFIN_USER_NEW          = '%s/Users/New';
+    public const ENDPOINT_JELLYFIN_USER_PASSWORD     = '%s/Users/%s/Password';
     public const ENDPOINT_JELLYFIN_USER_POLICY       = '%s/Users/%s/Policy';
     public const ENDPOINT_JELLYFIN_AUTH              = '%s/Users/AuthenticateByName';
+
+    public const PARITY_DEFAULT_USER_PASSWORD = 'Password123!';
 }

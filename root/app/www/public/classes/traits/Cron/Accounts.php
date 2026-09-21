@@ -190,9 +190,11 @@ trait Accounts
             $unchanged    = 0;
             $removed      = 0;
             $skipped      = 0;
+            $passwords    = 0;
             $accessUsers  = [];
             $createdNames = [];
             $linkedNames  = [];
+            $passwordNames = [];
 
             foreach ($keep as $username => $masterUser) {
                 $this->stopIfCancelled();
@@ -219,7 +221,11 @@ trait Accounts
                     $linkedNames[] = $masterUser['username'];
                     continue;
                 }
-                $result = $mediaApps->createUser($listener, $masterUser['username']);
+                $createPassword = '';
+                if ($mediaApps->isRemotePlexUser($master, $masterUser)) {
+                    $createPassword = MediaAppEndpoints::PARITY_DEFAULT_USER_PASSWORD;
+                }
+                $result = $mediaApps->createUser($listener, $masterUser['username'], $createPassword);
                 if (!empty($result['error'])) {
                     logger($this->logfile, 'create ' . $masterUser['username'] . ' ' . ($result['message'] ?? ''));
                     continue;
@@ -249,14 +255,44 @@ trait Accounts
                 $mediaApps->refreshUsers($listener['id']);
             }
             $mediaApps->linkUsers();
+
+            $platform = intval($listener['platform'] ?? 0);
+            if ($platform == MediaPlatforms::EMBY || $platform == MediaPlatforms::JELLYFIN) {
+                foreach ($keep as $username => $masterUser) {
+                    $this->stopIfCancelled();
+                    if (!$mediaApps->isRemotePlexUser($master, $masterUser)) {
+                        continue;
+                    }
+                    $link = $this->database->getMediaAppUserLinkForApp($masterUser['id'], $listener['id']);
+                    if (!$link) {
+                        continue;
+                    }
+                    $listenerUser = $this->database->getMediaAppUser(intval($link['linked_media_app_user_id'] ?? 0));
+                    $remoteId     = trim(strval($listenerUser['remote_id'] ?? ''));
+                    if ($remoteId == '') {
+                        continue;
+                    }
+                    $password = $mediaApps->setPasswordIfMissing($listener, $remoteId);
+                    if (!empty($password['error'])) {
+                        logger($this->logfile, 'password ' . ($masterUser['username'] ?? $username) . ' ' . ($password['message'] ?? ''));
+                        continue;
+                    }
+                    if (!empty($password['changed'])) {
+                        $passwords++;
+                        $passwordNames[] = $masterUser['username'] ?? $username;
+                    }
+                }
+            }
+
             $access = $mediaApps->syncListenerUserAccess($master, $listener, $accessUsers);
-            if ($created || $linked) {
+            if ($created || $linked || $passwords) {
                 $this->database->setMediaAppNeedsSync($listener['id']);
             }
             $this->sidecar['stats']['created']   = intval($this->sidecar['stats']['created'] ?? 0) + $created;
             $this->sidecar['stats']['linked']    = intval($this->sidecar['stats']['linked'] ?? 0) + $linked;
             $this->sidecar['stats']['unchanged'] = intval($this->sidecar['stats']['unchanged'] ?? 0) + $unchanged;
             $this->sidecar['stats']['removed']   = intval($this->sidecar['stats']['removed'] ?? 0) + $removed;
+            $this->sidecar['stats']['passwords'] = intval($this->sidecar['stats']['passwords'] ?? 0) + $passwords;
             $this->sidecar['stats']['access']    = intval($this->sidecar['stats']['access'] ?? 0) + intval($access['updated'] ?? 0);
             $this->recordUserParitySummary($listener['name'] ?? '', $created, $removed, $linked, $unchanged);
             foreach ($createdNames as $name) {
@@ -265,7 +301,10 @@ trait Accounts
             foreach ($linkedNames as $name) {
                 $this->addParityResult($listener, 'users', 'linked', $name);
             }
-            logger($this->logfile, 'user sync ' . $listener['name'] . ' added=' . $created . ' removed=' . $removed . ' linked=' . $linked . ' unchanged=' . $unchanged . ' skipped=' . $skipped . ' access=' . intval($access['updated'] ?? 0));
+            foreach ($passwordNames as $name) {
+                $this->addParityResult($listener, 'users', 'password', $name);
+            }
+            logger($this->logfile, 'user sync ' . $listener['name'] . ' added=' . $created . ' removed=' . $removed . ' linked=' . $linked . ' unchanged=' . $unchanged . ' skipped=' . $skipped . ' passwords=' . $passwords . ' access=' . intval($access['updated'] ?? 0));
         }
     }
 }

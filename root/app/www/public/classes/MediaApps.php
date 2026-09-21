@@ -1074,21 +1074,48 @@ class MediaApps
         return $result;
     }
 
-    public function createUser($mediaApp, $username)
+    public function createUser($mediaApp, $username, $password = '')
     {
         if (!$this->isOnline($mediaApp)) {
             return ['error' => true, 'message' => translate('offline')];
         }
 
+        $password = strval($password);
         switch (intval($mediaApp['platform'])) {
             case MediaPlatforms::PLEX:
                 return $this->plexCreateUser($mediaApp['token'], $mediaApp['server_id'] ?? '', $username);
             case MediaPlatforms::EMBY:
-                return $this->embyCreateUser($mediaApp['url'], $mediaApp['apikey'], $username);
+                return $this->embyCreateUser($mediaApp['url'], $mediaApp['apikey'], $username, $password);
             case MediaPlatforms::JELLYFIN:
-                return $this->jellyfinCreateUser($mediaApp['url'], $mediaApp['apikey'], $username);
+                return $this->jellyfinCreateUser($mediaApp['url'], $mediaApp['apikey'], $username, $password);
             default:
                 return ['error' => true, 'message' => translate('mediaAppNotFound')];
+        }
+    }
+
+    public function isRemotePlexUser($mediaApp, $user)
+    {
+        if (intval($mediaApp['platform'] ?? 0) != MediaPlatforms::PLEX) {
+            return false;
+        }
+
+        return trim(strval($user['email'] ?? '')) != '';
+    }
+
+    public function setPasswordIfMissing($mediaApp, $remoteId, $password = '')
+    {
+        if (!$this->isOnline($mediaApp)) {
+            return ['error' => true, 'message' => translate('offline')];
+        }
+
+        $password = $password != '' ? strval($password) : MediaAppEndpoints::PARITY_DEFAULT_USER_PASSWORD;
+        switch (intval($mediaApp['platform'])) {
+            case MediaPlatforms::EMBY:
+                return $this->embySetPasswordIfMissing($mediaApp['url'], $mediaApp['apikey'], $remoteId, $password);
+            case MediaPlatforms::JELLYFIN:
+                return $this->jellyfinSetPasswordIfMissing($mediaApp['url'], $mediaApp['apikey'], $remoteId, $password);
+            default:
+                return ['error' => false, 'changed' => false];
         }
     }
 

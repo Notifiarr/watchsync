@@ -89,7 +89,8 @@ foreach ($syncUsers as $syncApp) {
                                             </tbody>
                                         </table>
                                     </div>
-                                    <p class="small text-body-secondary mt-2"><?= htmlEscape(translate('adminAccountNote')) ?></p>
+                                    <p class="small text-body-secondary mt-2 mb-0"><?= htmlEscape(translate('adminAccountNote')) ?></p>
+                                    <p class="small text-body-secondary mb-0"><?= translate('parityRemotePlexPasswordNote', [htmlEscape(MediaAppEndpoints::PARITY_DEFAULT_USER_PASSWORD)]) ?></p>
                                     <div class="text-center w-100 mt-3">
                                         <button type="button" class="btn btn-outline-primary me-2" onclick="saveParityUsers()"><?= htmlEscape(translate('saveSyncUsers')) ?></button>
                                         <button type="button" class="btn btn-outline-<?= $canSync ? 'success' : 'danger' ?>"<?php if ($canSync) { ?> onclick="startUsersSync()"<?php } else { ?> disabled title="<?= htmlEscape(translate('needOnlineMediaApps')) ?>"<?php } ?>><?= htmlEscape(translate('startSync')) ?></button>

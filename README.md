@@ -4,6 +4,12 @@
 
 # Watchsync
 
+## WARNING
+
+There is no `main` branch for a reason, things are still being tested and tweaked. My setup is Plex (main) to Emby (listener) as the backup. A couple other users are setup with Plex (main) and Jellyfin (listener). With that said there is not really any testing for Emby/Jellyfin (main) and Plex (listener) & i dont think there will be many situations like this as most who use Plex use it as their main source and only run backups for the numerous times their auth breaks and locks everyone out of their media (someone should teach them how to cache data for when this happens so it doesnt completely break everyone)...
+
+Also it has not really been tested with something like Plex (main) and Emby (listener) and Jellyfin (listener), multiple listeners. In theory it shuold work as it is just a loop but feedback is always welcome if you try this.
+
 ## Purpose
 
 Tool to keep users, libraries and watch history in sync across multiple media apps. Also used for disaster recovery on that history to populate a new database.

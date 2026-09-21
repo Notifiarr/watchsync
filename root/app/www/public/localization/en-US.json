@@ -299,6 +299,7 @@
     "lastSeen": "Last seen",
     "admin": "Admin",
     "adminAccountNote": "* is an admin account",
+    "parityRemotePlexPasswordNote": "Note: Newly created users based on Plex remote accounts will have <code>{0}</code> as their password.",
     "yes": "Yes",
     "no": "No",
     "active": "Active",

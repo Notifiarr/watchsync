@@ -547,11 +547,16 @@ trait Jellyfin
         return ['error' => true, 'message' => $this->embyApiError($last) ?: translate('couldNotSaveSettings')];
     }
 
-    public function jellyfinCreateUser($url, $apikey, $username)
+    public function jellyfinCreateUser($url, $apikey, $username, $password = '')
     {
         $url      = rtrim(trim($url), '/');
         $headers  = $this->jellyfinHeaders($apikey);
-        $payload  = json_encode(['Name' => $username]);
+        $body     = ['Name' => $username];
+        $password = strval($password);
+        if ($password != '') {
+            $body['Password'] = $password;
+        }
+        $payload  = json_encode($body);
         $curl     = curl(sprintf(MediaAppEndpoints::ENDPOINT_JELLYFIN_USER_NEW, $url), $headers, 'POST', $payload);
         $response = is_array($curl['response']) ? $curl['response'] : json_decode($curl['response'], true);
         $remoteId = $response['Id'] ?? '';
@@ -559,10 +564,46 @@ trait Jellyfin
             return ['error' => true, 'message' => $curl['error'] ?: translate('mediaAppUsersFailed')];
         }
 
+        if ($password != '') {
+            $this->jellyfinSetPasswordIfMissing($url, $apikey, $remoteId, $password);
+        }
+
         $this->jellyfinSetUserLibraryAccess($url, $apikey, $remoteId, [], false);
         $this->jellyfinApiForget();
 
         return ['error' => false, 'remote_id' => $remoteId];
+    }
+
+    public function jellyfinSetPasswordIfMissing($url, $apikey, $remoteId, $password = '')
+    {
+        $url      = rtrim(trim($url), '/');
+        $remoteId = trim(strval($remoteId));
+        $password = $password != '' ? strval($password) : MediaAppEndpoints::PARITY_DEFAULT_USER_PASSWORD;
+        if ($remoteId == '' || $password == '') {
+            return ['error' => true, 'message' => translate('mediaAppUsersFailed')];
+        }
+
+        $curl     = curl(sprintf(MediaAppEndpoints::ENDPOINT_JELLYFIN_USER, $url, rawurlencode($remoteId)), $this->jellyfinHeaders($apikey), 'GET');
+        $response = is_array($curl['response']) ? $curl['response'] : json_decode($curl['response'], true);
+        if ($curl['code'] < 200 || $curl['code'] > 299 || !is_array($response)) {
+            return ['error' => true, 'message' => $curl['error'] ?: translate('mediaAppUsersFailed')];
+        }
+        if (!empty($response['HasPassword']) || !empty($response['HasConfiguredPassword'])) {
+            return ['error' => false, 'changed' => false];
+        }
+
+        $payload = json_encode([
+            'Id'            => $remoteId,
+            'CurrentPw'     => '',
+            'NewPw'         => $password,
+            'ResetPassword' => false,
+        ]);
+        $curl = curl(sprintf(MediaAppEndpoints::ENDPOINT_JELLYFIN_USER_PASSWORD, $url, rawurlencode($remoteId)), $this->jellyfinHeaders($apikey), 'POST', $payload);
+        if ($curl['code'] < 200 || $curl['code'] > 299) {
+            return ['error' => true, 'message' => $curl['error'] ?: translate('mediaAppUsersFailed')];
+        }
+
+        return ['error' => false, 'changed' => true];
     }
 
     public function jellyfinAccessMapFromUsers($rows)

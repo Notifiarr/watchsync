@@ -711,7 +711,7 @@ trait Emby
         return '';
     }
 
-    public function embyCreateUser($url, $apikey, $username)
+    public function embyCreateUser($url, $apikey, $username, $password = '')
     {
         $url      = rtrim(trim($url), '/');
         $headers  = $this->embyHeaders($apikey);
@@ -723,10 +723,47 @@ trait Emby
             return ['error' => true, 'message' => $curl['error'] ?: translate('mediaAppUsersFailed')];
         }
 
+        if (strval($password) != '') {
+            $this->embySetPasswordIfMissing($url, $apikey, $remoteId, strval($password));
+        }
+
         $this->embySetUserLibraryAccess($url, $apikey, $remoteId, [], false);
         $this->embyApiForget();
 
         return ['error' => false, 'remote_id' => $remoteId];
+    }
+
+    public function embySetPasswordIfMissing($url, $apikey, $remoteId, $password = '')
+    {
+        $url      = rtrim(trim($url), '/');
+        $remoteId = trim(strval($remoteId));
+        $password = $password != '' ? strval($password) : MediaAppEndpoints::PARITY_DEFAULT_USER_PASSWORD;
+        if ($remoteId == '' || $password == '') {
+            return ['error' => true, 'message' => translate('mediaAppUsersFailed')];
+        }
+
+        $curl     = curl(sprintf(MediaAppEndpoints::ENDPOINT_EMBY_USER, $url, rawurlencode($remoteId)), $this->embyHeaders($apikey), 'GET');
+        $response = is_array($curl['response']) ? $curl['response'] : json_decode($curl['response'], true);
+        if ($curl['code'] < 200 || $curl['code'] > 299 || !is_array($response)) {
+            return ['error' => true, 'message' => $curl['error'] ?: translate('mediaAppUsersFailed')];
+        }
+        if (!empty($response['HasPassword']) || !empty($response['HasConfiguredPassword'])) {
+            return ['error' => false, 'changed' => false];
+        }
+
+        $payload = json_encode([
+            'Id'              => $remoteId,
+            'CurrentPw'       => '',
+            'CurrentPassword' => '',
+            'NewPw'           => $password,
+            'ResetPassword'   => false,
+        ]);
+        $curl = curl(sprintf(MediaAppEndpoints::ENDPOINT_EMBY_USER_PASSWORD, $url, rawurlencode($remoteId)), $this->embyHeaders($apikey), 'POST', $payload);
+        if ($curl['code'] < 200 || $curl['code'] > 299) {
+            return ['error' => true, 'message' => $curl['error'] ?: translate('mediaAppUsersFailed')];
+        }
+
+        return ['error' => false, 'changed' => true];
     }
 
     public function embyAccessMapFromUsers($rows)
