@@ -103,6 +103,9 @@ function loggerRotate($logfile)
     if (!$logfile || !is_file($logfile)) {
         return;
     }
+    if (isSyncJobLogFile($logfile)) {
+        return;
+    }
 
     $rotateSize = LOG_ROTATE_SIZE * pow(1024, 2);
     clearstatcache(true, $logfile);

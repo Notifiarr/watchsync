@@ -687,11 +687,9 @@ trait Plex
             return $history;
         }
 
-        if (!$scopeKeys) {
-            foreach (['movies', 'episodes'] as $type) {
-                foreach ($history[$type] ?? [] as $itemId => $watch) {
-                    $status[$type][$itemId] = mergeWatchState($status[$type][$itemId] ?? [], $watch);
-                }
+        foreach (['movies', 'episodes'] as $type) {
+            foreach ($history[$type] ?? [] as $itemId => $watch) {
+                $status[$type][$itemId] = mergeWatchState($status[$type][$itemId] ?? [], $watch);
             }
         }
         $this->plexStoreUserLastSeen($userId, $lastSeen);

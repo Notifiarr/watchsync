@@ -28,7 +28,7 @@ if (IS_GUEST) {
     exit;
 }
 
-switch ($_POST['event'] ?? '') {
+switch ($_POST['event'] ?? $_GET['event'] ?? '') {
     case 'toggleAutomatic':
         $key = strval($_POST['key'] ?? '');
         if (!in_array($key, ['parity', 'library', 'history'])) {

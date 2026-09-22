@@ -408,7 +408,7 @@ trait Notify
         $sections = [];
         $library  = $this->librarySummaryRows();
         if ($library) {
-            $sections[] = ['LIBRARY', ['App', 'Kind', 'Added', 'Updated'], $library];
+            $sections[] = ['LIBRARY', ['App', 'Type', 'Added', 'Updated'], $library];
         }
         $parity = [];
         if (empty($this->currentJob['sync_accounts'])) {

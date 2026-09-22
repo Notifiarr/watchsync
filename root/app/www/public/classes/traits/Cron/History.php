@@ -785,6 +785,13 @@ trait History
 
     public function clearAbsentLocalWatchLinks($members, $index, &$existing, $incoming, $dry, $debug, &$dbRows, &$pushRows, &$dryPlans, &$counts)
     {
+        if (!empty($this->currentJob['history_libraries'])) {
+            logger($this->logfile, 'skip local clear: history library scope is not authoritative for absences');
+            loggerFlush($this->logfile);
+
+            return;
+        }
+
         $ordered = $members;
         usort($ordered, function ($a, $b) {
             $aMaster = intval($a['app']['role'] ?? 0) == MediaAppRoles::MASTER ? 0 : 1;
