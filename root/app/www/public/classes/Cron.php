@@ -20,7 +20,7 @@ class Cron
 
     protected $database;
     protected $logfile            = '';
-    protected $sidecar            = [];
+    public    $currentJob         = [];
     protected $libraryImportIndex = null;
 
     public function __construct()
@@ -30,13 +30,13 @@ class Cron
         $this->database = $database;
     }
 
-    public function start($mediaAppId, $userIds, $syncMode, $syncType, $libraries = [], $syncAccounts = 0, $scan = 0, $dryRun = 0)
+    public function start($mediaAppId, $userIds, $syncMode, $syncType, $libraries = [], $syncAccounts = 0, $scan = 0, $dryRun = 0, $extra = [])
     {
         if (intval($syncType) == MediaSyncTypes::HISTORY && !$this->hasLibraryData()) {
             return ['error' => true, 'message' => translate('historyNeedsLibraryData')];
         }
 
-        $job = $this->createJob($mediaAppId, $userIds, $syncMode, $syncType, $libraries, $syncAccounts, MediaSyncTriggers::MANUAL, $scan, $dryRun);
+        $job = $this->createJob($mediaAppId, $userIds, $syncMode, $syncType, $libraries, $syncAccounts, MediaSyncTriggers::MANUAL, $scan, $dryRun, $extra);
         if (!$job) {
             return ['error' => true, 'message' => translate('couldNotQueueSync')];
         }
@@ -53,23 +53,23 @@ class Cron
             return;
         }
 
-        $this->sidecar = $this->job($jobId);
-        if (!$this->sidecar) {
+        $this->currentJob = $this->job($jobId);
+        if (!$this->currentJob) {
             logger(CRON_SYNC_LOG, 'sync ->');
             logger(CRON_SYNC_LOG, 'invalid job id');
             logger(CRON_SYNC_LOG, 'sync <-');
             return;
         }
 
-        $this->logfile             = CRON_LOGS_PATH . $this->sidecar['id'] . '.log';
-        $this->sidecar['log_file'] = $this->logfile;
-        $log                       = $this->logfile;
-        $persist                   = false;
-        $type                      = '';
+        $this->logfile                = CRON_LOGS_PATH . $this->currentJob['id'] . '.log';
+        $this->currentJob['log_file'] = $this->logfile;
+        $log                          = $this->logfile;
+        $persist                      = false;
+        $type                         = '';
         logger($log, 'sync ->');
         loggerFlush($log);
         try {
-            $syncType = intval($this->sidecar['sync_type'] ?? MediaSyncTypes::USERS);
+            $syncType = intval($this->currentJob['sync_type'] ?? MediaSyncTypes::USERS);
             $typeName = 'users';
             if ($syncType == MediaSyncTypes::LIBRARY) {
                 $typeName = 'library';
@@ -77,20 +77,20 @@ class Cron
                 $typeName = 'history';
             } else if ($syncType == MediaSyncTypes::LIBRARIES) {
                 $typeName = 'libraries';
-            } else if (!empty($this->sidecar['sync_accounts'])) {
+            } else if (!empty($this->currentJob['sync_accounts'])) {
                 $typeName = 'parity';
             }
             logger($log, 'type=' . $typeName);
             $triggerName = 'manual';
-            if (intval($this->sidecar['trigger'] ?? 0) == MediaSyncTriggers::AUTOMATIC) {
+            if (intval($this->currentJob['trigger'] ?? 0) == MediaSyncTriggers::AUTOMATIC) {
                 $triggerName = 'automatic';
-            } else if (intval($this->sidecar['trigger'] ?? 0) == MediaSyncTriggers::WEBHOOK) {
+            } else if (intval($this->currentJob['trigger'] ?? 0) == MediaSyncTriggers::WEBHOOK) {
                 $triggerName = 'webhook';
             }
             logger($log, 'trigger=' . $triggerName);
-            logger($log, 'dry_run=' . (!empty($this->sidecar['dry_run']) ? '1' : '0'));
+            logger($log, 'dry_run=' . (!empty($this->currentJob['dry_run']) ? '1' : '0'));
             $users = [];
-            foreach ($this->sidecar['users'] ?? [] as $user) {
+            foreach ($this->currentJob['users'] ?? [] as $user) {
                 $name = trim(strval($user));
                 if ($name != '') {
                     $users[] = $name;
@@ -100,7 +100,7 @@ class Cron
                 logger($log, 'users=' . implode(',', $users));
             }
             $historyLibraries = [];
-            foreach ($this->sidecar['history_libraries'] ?? [] as $library) {
+            foreach ($this->currentJob['history_libraries'] ?? [] as $library) {
                 $key = strval($library['key'] ?? '');
                 if ($key != '') {
                     $historyLibraries[] = $key;
@@ -110,23 +110,23 @@ class Cron
                 logger($log, 'libraries=' . implode(',', $historyLibraries));
             }
 
-            if (!$this->acquireLock($this->sidecar['id'])) {
-                $running = $this->runningJob($this->jobLockType($this->sidecar));
-                if (($running['id'] ?? '') == ($this->sidecar['id'] ?? '')) {
+            if (!$this->acquireLock($this->currentJob['id'])) {
+                $running = $this->runningJob($this->jobLockType($this->currentJob));
+                if (($running['id'] ?? '') == ($this->currentJob['id'] ?? '')) {
                     logger($log, 'lock active same job');
                     return;
                 }
-                if (($this->sidecar['status'] ?? '') == 'running') {
-                    $this->sidecar['status']  = 'queued';
-                    $this->sidecar['started'] = 0;
+                if (($this->currentJob['status'] ?? '') == 'running') {
+                    $this->currentJob['status']  = 'queued';
+                    $this->currentJob['started'] = 0;
                     $this->writeJobHeader();
                 }
                 logger($log, 'lock active');
                 return;
             }
-            if (($this->sidecar['status'] ?? '') != 'running' || empty($this->sidecar['started'])) {
-                $this->sidecar['status']  = 'running';
-                $this->sidecar['started'] = time();
+            if (($this->currentJob['status'] ?? '') != 'running' || empty($this->currentJob['started'])) {
+                $this->currentJob['status']  = 'running';
+                $this->currentJob['started'] = time();
             }
             $this->writeJobHeader();
 
@@ -144,15 +144,15 @@ class Cron
                     $this->pullMediaLibrary();
                 } else if ($syncType == MediaSyncTypes::LIBRARIES) {
                     $this->syncLibraries();
-                } else if (!empty($this->sidecar['sync_accounts'])) {
+                } else if (!empty($this->currentJob['sync_accounts'])) {
                     $this->syncAccounts();
-                } else if (!empty($this->sidecar['webhook_item'])) {
+                } else if (!empty($this->currentJob['webhook_item'])) {
                     $this->syncWebhookItem();
                 } else {
                     if ($syncType != MediaSyncTypes::HISTORY) {
                         $this->pullMediaLibrary();
                     }
-                    $syncMode = intval($this->sidecar['sync_mode']);
+                    $syncMode = intval($this->currentJob['sync_mode']);
                     $this->syncWatch($syncMode);
                 }
             } catch (Exception $e) {
@@ -166,29 +166,29 @@ class Cron
             }
 
             if ($cancelled || $this->cancelled()) {
-                $this->sidecar['status'] = 'cancelled';
+                $this->currentJob['status'] = 'cancelled';
             } else if ($error) {
-                $this->sidecar['status'] = 'error';
+                $this->currentJob['status'] = 'error';
             } else {
-                $this->sidecar['status'] = 'finished';
+                $this->currentJob['status'] = 'finished';
             }
-            $this->sidecar['finished'] = time();
-            $persist                   = true;
-            if (($this->sidecar['status'] ?? '') == 'finished' && $this->shouldUpdateSyncSchedule($this->sidecar)) {
-                $this->setSyncLastFinished($this->jobLockType($this->sidecar), intval($this->sidecar['finished']));
+            $this->currentJob['finished'] = time();
+            $persist                      = true;
+            if (($this->currentJob['status'] ?? '') == 'finished' && $this->shouldUpdateSyncSchedule($this->currentJob)) {
+                $this->setSyncLastFinished($this->jobLockType($this->currentJob), intval($this->currentJob['finished']));
             }
-            $notifyTrigger = intval($this->sidecar['trigger'] ?? 0) == MediaSyncTriggers::WEBHOOK ? 'syncWebhook' : 'syncOverview';
+            $notifyTrigger = intval($this->currentJob['trigger'] ?? 0) == MediaSyncTriggers::WEBHOOK ? 'syncWebhook' : 'syncOverview';
             $this->notifySync($notifyTrigger);
-            $type = $this->jobLockType($this->sidecar);
-            if (($this->sidecar['status'] ?? '') == 'finished' && intval($this->sidecar['sync_type'] ?? 0) == MediaSyncTypes::LIBRARY) {
+            $type = $this->jobLockType($this->currentJob);
+            if (($this->currentJob['status'] ?? '') == 'finished' && intval($this->currentJob['sync_type'] ?? 0) == MediaSyncTypes::LIBRARY) {
                 $this->queueHistoryAfterLibraryFinish();
             }
         } finally {
             logger($log, 'sync <-');
             loggerFlush($log);
-            if (!empty($this->sidecar['dry_run_summary']) && is_array($this->sidecar['dry_run_summary'])) {
-                loggerBlock($log, $this->sidecar['dry_run_summary']);
-                unset($this->sidecar['dry_run_summary']);
+            if (!empty($this->currentJob['dry_run_summary']) && is_array($this->currentJob['dry_run_summary'])) {
+                loggerBlock($log, $this->currentJob['dry_run_summary']);
+                unset($this->currentJob['dry_run_summary']);
             } else if ($persist) {
                 $summary = $this->buildSyncLogSummary();
                 if ($summary) {

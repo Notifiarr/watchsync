@@ -434,7 +434,7 @@ trait Jobs
 
     public function cancelled()
     {
-        $id = $this->sidecar['id'] ?? '';
+        $id = $this->currentJob['id'] ?? '';
         if (!$id) {
             return false;
         }
@@ -468,10 +468,10 @@ trait Jobs
         }
 
         if (str_equals_any($job['status'] ?? '', ['running', 'queued']) || !intval($job['finished'] ?? 0)) {
-            $this->sidecar             = $job;
-            $this->sidecar['status']   = 'cancelled';
-            $this->sidecar['finished'] = intval($job['finished'] ?? 0) ?: time();
-            unset($this->sidecar['runtime'], $this->sidecar['size'], $this->sidecar['queued_wait']);
+            $this->currentJob             = $job;
+            $this->currentJob['status']   = 'cancelled';
+            $this->currentJob['finished'] = intval($job['finished'] ?? 0) ?: time();
+            unset($this->currentJob['runtime'], $this->currentJob['size'], $this->currentJob['queued_wait']);
             $this->writeJobHeader();
         }
 
@@ -532,14 +532,14 @@ trait Jobs
             unlink($defaultLog);
         }
 
-        $this->sidecar             = $job;
-        $this->sidecar['status']   = 'queued';
-        $this->sidecar['queued']   = time();
-        $this->sidecar['started']  = 0;
-        $this->sidecar['finished'] = 0;
-        $this->sidecar['log_file'] = '';
-        $this->sidecar['trigger']  = MediaSyncTriggers::MANUAL;
-        unset($this->sidecar['stats'], $this->sidecar['runtime'], $this->sidecar['size'], $this->sidecar['queued_wait'], $this->sidecar['dry_run_summary'], $this->sidecar['sync_summary']);
+        $this->currentJob             = $job;
+        $this->currentJob['status']   = 'queued';
+        $this->currentJob['queued']   = time();
+        $this->currentJob['started']  = 0;
+        $this->currentJob['finished'] = 0;
+        $this->currentJob['log_file'] = '';
+        $this->currentJob['trigger']  = MediaSyncTriggers::MANUAL;
+        unset($this->currentJob['stats'], $this->currentJob['runtime'], $this->currentJob['size'], $this->currentJob['queued_wait'], $this->currentJob['dry_run_summary'], $this->currentJob['sync_summary']);
 
         if (!$this->writeJobHeader()) {
             return ['error' => true, 'message' => translate('couldNotQueueSync')];
@@ -637,7 +637,7 @@ trait Jobs
 
     public function lockFile($job = [])
     {
-        $type = $this->jobLockType($job ?: $this->sidecar);
+        $type = $this->jobLockType($job ?: $this->currentJob);
         if ($type == '') {
             return '';
         }
@@ -663,13 +663,13 @@ trait Jobs
 
     public function isLocked($job = [])
     {
-        $type    = $this->jobLockType($job ?: $this->sidecar);
+        $type    = $this->jobLockType($job ?: $this->currentJob);
         $running = $this->runningJob($type);
         if (!$running) {
             return false;
         }
 
-        $id = $job['id'] ?? $this->sidecar['id'] ?? '';
+        $id = $job['id'] ?? $this->currentJob['id'] ?? '';
         return ($running['id'] ?? '') != $id;
     }
 
@@ -788,13 +788,13 @@ trait Jobs
             }
         }
 
-        $previousSidecar = $this->sidecar;
-        $previousLogfile = $this->logfile;
-        $this->sidecar   = $job;
-        $this->logfile   = '';
-        $saved           = $this->writeJobHeader();
-        $this->sidecar   = $previousSidecar;
-        $this->logfile   = $previousLogfile;
+        $previousJob      = $this->currentJob;
+        $previousLogfile  = $this->logfile;
+        $this->currentJob = $job;
+        $this->logfile    = '';
+        $saved            = $this->writeJobHeader();
+        $this->currentJob = $previousJob;
+        $this->logfile    = $previousLogfile;
         if (!$saved) {
             return [];
         }
@@ -854,9 +854,9 @@ trait Jobs
             return [];
         }
 
-        $this->sidecar                  = $job;
-        $this->sidecar['webhook_event'] = strval($event);
-        $this->sidecar['webhook_item']  = [
+        $this->currentJob                  = $job;
+        $this->currentJob['webhook_event'] = strval($event);
+        $this->currentJob['webhook_item']  = [
             'type'         => strval($type),
             'item_id'      => intval($item['id'] ?? 0),
             'user_id'      => intval($userId),
@@ -871,7 +871,7 @@ trait Jobs
 
         $this->processQueue();
 
-        return $this->formatJob($this->sidecar);
+        return $this->formatJob($this->currentJob);
     }
 
     public function webhookHistoryPending($userId)
@@ -939,15 +939,15 @@ trait Jobs
             }
         }
 
-        $parentLog                 = $this->logfile ?: CRON_DISPATCHER_LOG;
-        $savedLog                  = $this->logfile;
-        $this->sidecar             = $job;
-        $this->sidecar['status']   = 'running';
-        $this->sidecar['started']  = time();
-        $this->sidecar['finished'] = 0;
-        $this->sidecar['log_file'] = CRON_LOGS_PATH . $job['id'] . '.log';
-        unset($this->sidecar['runtime'], $this->sidecar['size'], $this->sidecar['queued_wait']);
-        $this->logfile = $this->sidecar['log_file'];
+        $parentLog                    = $this->logfile ?: CRON_DISPATCHER_LOG;
+        $savedLog                     = $this->logfile;
+        $this->currentJob             = $job;
+        $this->currentJob['status']   = 'running';
+        $this->currentJob['started']  = time();
+        $this->currentJob['finished'] = 0;
+        $this->currentJob['log_file'] = CRON_LOGS_PATH . $job['id'] . '.log';
+        unset($this->currentJob['runtime'], $this->currentJob['size'], $this->currentJob['queued_wait']);
+        $this->logfile = $this->currentJob['log_file'];
         $this->writeJobHeader();
         logger($this->logfile, 'starting');
         loggerFlush($this->logfile);
@@ -979,10 +979,10 @@ trait Jobs
         }
 
         if ($this->logShowsFinished($file)) {
-            $this->sidecar             = $job;
-            $this->sidecar['status']   = 'finished';
-            $this->sidecar['finished'] = intval($job['finished'] ?? 0) ?: $mtime ?: time();
-            unset($this->sidecar['runtime'], $this->sidecar['size'], $this->sidecar['queued_wait']);
+            $this->currentJob             = $job;
+            $this->currentJob['status']   = 'finished';
+            $this->currentJob['finished'] = intval($job['finished'] ?? 0) ?: $mtime ?: time();
+            unset($this->currentJob['runtime'], $this->currentJob['size'], $this->currentJob['queued_wait']);
             $this->logfile = $file;
             $this->writeJobHeader();
             $this->releaseLock($job['id']);
@@ -990,10 +990,10 @@ trait Jobs
             return true;
         }
 
-        $this->sidecar             = $job;
-        $this->sidecar['status']   = 'error';
-        $this->sidecar['finished'] = time();
-        unset($this->sidecar['runtime'], $this->sidecar['size'], $this->sidecar['queued_wait']);
+        $this->currentJob             = $job;
+        $this->currentJob['status']   = 'error';
+        $this->currentJob['finished'] = time();
+        unset($this->currentJob['runtime'], $this->currentJob['size'], $this->currentJob['queued_wait']);
         $this->logfile = $file ?: (CRON_LOGS_PATH . $job['id'] . '.log');
         logger($this->logfile, 'marked stale: no recent log output');
         loggerFlush($this->logfile);
@@ -1319,7 +1319,7 @@ trait Jobs
     {
         global $mediaApps;
 
-        $log = $this->logfile ?: ($this->sidecar['log_file'] ?? CRON_SYNC_LOG);
+        $log = $this->logfile ?: ($this->currentJob['log_file'] ?? CRON_SYNC_LOG);
         if (!$this->automaticEnabled('history')) {
             logger($log, 'automated history sync disabled, skipping auto history sync');
             return false;
@@ -1327,7 +1327,7 @@ trait Jobs
         if (!$this->database->settingEnabled('syncHistoryNewLibraries')) {
             return false;
         }
-        $libraries = array_values($this->sidecar['history_libraries'] ?? []);
+        $libraries = array_values($this->currentJob['history_libraries'] ?? []);
         if (!$libraries) {
             logger($log, 'no new libraries found, skipping auto history sync');
             return false;
@@ -1434,11 +1434,11 @@ trait Jobs
 
     public function writeJobHeader()
     {
-        if (empty($this->sidecar['id'])) {
+        if (empty($this->currentJob['id'])) {
             return;
         }
 
-        $payload = $this->sidecar;
+        $payload = $this->currentJob;
         unset($payload['runtime'], $payload['size'], $payload['queued_wait'], $payload['dry_run_summary'], $payload['sync_summary'], $payload['watch_index']);
         if (is_array($payload['stats'] ?? null)) {
             foreach (array_keys($payload['stats']) as $key) {
@@ -1481,7 +1481,7 @@ trait Jobs
 
     public function acquireLock($jobId)
     {
-        $job = (($this->sidecar['id'] ?? '') == $jobId) ? $this->sidecar : $this->job($jobId);
+        $job = (($this->currentJob['id'] ?? '') == $jobId) ? $this->currentJob : $this->job($jobId);
         if (!$job) {
             return false;
         }
@@ -1518,14 +1518,14 @@ trait Jobs
 
     public function releaseLock($jobId = '')
     {
-        $id = $jobId ?: ($this->sidecar['id'] ?? '');
+        $id = $jobId ?: ($this->currentJob['id'] ?? '');
         if ($this->jobLockHandle) {
             flock($this->jobLockHandle, LOCK_UN);
             fclose($this->jobLockHandle);
             $this->jobLockHandle = null;
         }
 
-        $job  = ($id && ($this->sidecar['id'] ?? '') == $id) ? $this->sidecar : ($id ? $this->job($id) : $this->sidecar);
+        $job  = ($id && ($this->currentJob['id'] ?? '') == $id) ? $this->currentJob : ($id ? $this->job($id) : $this->currentJob);
         $lock = $this->lockFile($job);
         if (!$lock || !is_file($lock)) {
             return;

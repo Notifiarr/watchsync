@@ -40,7 +40,7 @@ trait Library
 
     public function targetApps()
     {
-        $mediaAppId = intval($this->sidecar['media_app_id'] ?? 0);
+        $mediaAppId = intval($this->currentJob['media_app_id'] ?? 0);
         if ($mediaAppId) {
             $mediaApp = $this->database->getMediaApp($mediaAppId);
             if ($mediaApp) {
@@ -96,7 +96,7 @@ trait Library
     public function libraryAppIds()
     {
         $ids = [];
-        foreach ($this->sidecar['libraries'] ?? [] as $library) {
+        foreach ($this->currentJob['libraries'] ?? [] as $library) {
             if (!empty($library['media_app_id'])) {
                 $ids[] = intval($library['media_app_id']);
             }
@@ -108,7 +108,7 @@ trait Library
     public function libraryKeys($mediaAppId)
     {
         $keys = [];
-        foreach ($this->sidecar['libraries'] ?? [] as $library) {
+        foreach ($this->currentJob['libraries'] ?? [] as $library) {
             if (intval($library['media_app_id'] ?? 0) == intval($mediaAppId) && ($library['key'] ?? '') != '') {
                 $keys[] = $library['key'];
             }
@@ -129,7 +129,7 @@ trait Library
         global $mediaApps;
 
         $keys = $this->libraryKeys($mediaApp['id']);
-        if (!$keys && !empty($this->sidecar['libraries'])) {
+        if (!$keys && !empty($this->currentJob['libraries'])) {
             return [];
         }
         if (!$keys) {
@@ -164,7 +164,7 @@ trait Library
             return;
         }
 
-        $scan = intval($this->sidecar['scan'] ?? MediaLibraryScans::LAST_SCAN);
+        $scan = intval($this->currentJob['scan'] ?? MediaLibraryScans::LAST_SCAN);
 
         $knownBefore = [];
         foreach ($apps as $mediaApp) {
@@ -184,10 +184,10 @@ trait Library
         if ($this->isAutomaticJob() && $this->database->settingEnabled('syncLibraryAutoMeta')) {
             $state = $mediaApps->scanLibraryState();
             if ($state) {
-                $changed = false;
-                $sidecar = is_array($this->sidecar['libraries'] ?? null) ? $this->sidecar['libraries'] : [];
-                $have    = [];
-                foreach ($sidecar as $library) {
+                $changed      = false;
+                $jobLibraries = is_array($this->currentJob['libraries'] ?? null) ? $this->currentJob['libraries'] : [];
+                $have         = [];
+                foreach ($jobLibraries as $library) {
                     $id = intval($library['media_app_id'] ?? 0) . ':' . strval($library['key'] ?? '');
                     if ($id != '0:') {
                         $have[$id] = true;
@@ -212,15 +212,15 @@ trait Library
                         $state[$id] = 1;
                         $changed    = true;
                         if (empty($have[$id])) {
-                            $sidecar[] = ['media_app_id' => intval($mediaApp['id']), 'key' => $key];
-                            $have[$id] = true;
+                            $jobLibraries[] = ['media_app_id' => intval($mediaApp['id']), 'key' => $key];
+                            $have[$id]      = true;
                         }
                     }
                 }
                 if ($changed) {
                     $mediaApps->setScanLibraries($state);
                 }
-                $this->sidecar['libraries'] = $sidecar;
+                $this->currentJob['libraries'] = $jobLibraries;
             }
         }
 
@@ -271,7 +271,7 @@ trait Library
                     'episodes' => $items['episodes'] ?? [],
                 ], $added, $updated, $unchanged);
                 if (($added['movies'] + $added['series'] + $added['episodes']) > $addedBefore && ($library['key'] ?? '') != '') {
-                    $this->sidecar['history_libraries'][intval($mediaApp['id']) . ':' . $library['key']] = [
+                    $this->currentJob['history_libraries'][intval($mediaApp['id']) . ':' . $library['key']] = [
                         'media_app_id' => intval($mediaApp['id']),
                         'key'          => strval($library['key']),
                     ];
@@ -286,14 +286,14 @@ trait Library
             }
 
             $this->database->setMediaAppLastScan($mediaApp['id'], $scannedAt);
-            $this->sidecar['stats']['added']     = intval($this->sidecar['stats']['added'] ?? 0) + $added['movies'] + $added['series'] + $added['episodes'];
-            $this->sidecar['stats']['updated']   = intval($this->sidecar['stats']['updated'] ?? 0) + $updated['movies'] + $updated['series'] + $updated['episodes'];
-            $this->sidecar['stats']['unchanged'] = intval($this->sidecar['stats']['unchanged'] ?? 0) + $unchanged['movies'] + $unchanged['series'] + $unchanged['episodes'];
+            $this->currentJob['stats']['added']     = intval($this->currentJob['stats']['added'] ?? 0) + $added['movies'] + $added['series'] + $added['episodes'];
+            $this->currentJob['stats']['updated']   = intval($this->currentJob['stats']['updated'] ?? 0) + $updated['movies'] + $updated['series'] + $updated['episodes'];
+            $this->currentJob['stats']['unchanged'] = intval($this->currentJob['stats']['unchanged'] ?? 0) + $unchanged['movies'] + $unchanged['series'] + $unchanged['episodes'];
             foreach (['movies', 'series', 'episodes'] as $type) {
                 $this->addLibraryResult($mediaApp, $type, 'added', $added[$type]);
                 $this->addLibraryResult($mediaApp, $type, 'updated', $updated[$type]);
                 $this->addLibraryResult($mediaApp, $type, 'unchanged', $unchanged[$type]);
-                $this->sidecar['stats']['library'][$type] = intval($this->sidecar['stats']['library'][$type] ?? 0) + $totals[$type];
+                $this->currentJob['stats']['library'][$type] = intval($this->currentJob['stats']['library'][$type] ?? 0) + $totals[$type];
             }
             logger($this->logfile, 'media library ' . $mediaApp['name'] . ' movies: added ' . $added['movies'] . ', updated: ' . $updated['movies'] . ', unchanged: ' . $unchanged['movies'] . ', total: ' . $totals['movies'] . ' | series: added ' . $added['series'] . ', updated: ' . $updated['series'] . ', unchanged: ' . $unchanged['series'] . ', total: ' . $totals['series'] . ' | episodes: added ' . $added['episodes'] . ', updated: ' . $updated['episodes'] . ', unchanged: ' . $unchanged['episodes'] . ', total: ' . $totals['episodes']);
             $this->libraryImportIndex = null;
@@ -1388,7 +1388,7 @@ trait Library
                 }
                 if ($changed) {
                     $mediaApps->setParitySync('library', $state);
-                    $this->sidecar['libraries'] = $mediaApps->selectedParityLibraries(false);
+                    $this->currentJob['libraries'] = $mediaApps->selectedParityLibraries(false);
                 }
             }
         }
@@ -1518,10 +1518,10 @@ trait Library
             if ($created || $linked || $removed) {
                 $this->database->setMediaAppNeedsSync($listener['id']);
             }
-            $this->sidecar['stats']['created'] = intval($this->sidecar['stats']['created'] ?? 0) + $created;
-            $this->sidecar['stats']['linked']  = intval($this->sidecar['stats']['linked'] ?? 0) + $linked;
-            $this->sidecar['stats']['removed'] = intval($this->sidecar['stats']['removed'] ?? 0) + $removed;
-            $this->sidecar['stats']['access']  = intval($this->sidecar['stats']['access'] ?? 0) + intval($access['updated'] ?? 0);
+            $this->currentJob['stats']['created'] = intval($this->currentJob['stats']['created'] ?? 0) + $created;
+            $this->currentJob['stats']['linked']  = intval($this->currentJob['stats']['linked'] ?? 0) + $linked;
+            $this->currentJob['stats']['removed'] = intval($this->currentJob['stats']['removed'] ?? 0) + $removed;
+            $this->currentJob['stats']['access']  = intval($this->currentJob['stats']['access'] ?? 0) + intval($access['updated'] ?? 0);
             foreach ($createdNames as $name) {
                 $this->addParityResult($listener, 'libraries', 'created', $name);
             }
@@ -1538,7 +1538,7 @@ trait Library
     public function selectedLibraryRefs($master)
     {
         $refs = [];
-        foreach ($this->sidecar['libraries'] ?? [] as $library) {
+        foreach ($this->currentJob['libraries'] ?? [] as $library) {
             if (intval($library['media_app_id'] ?? 0) && intval($library['media_app_id']) != intval($master['id'])) {
                 continue;
             }

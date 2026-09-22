@@ -706,7 +706,7 @@ trait Plex
     {
         global $cron;
 
-        $list = !empty($cron) ? ($cron->sidecar['history_libraries'] ?? []) : [];
+        $list = !empty($cron) ? ($cron->currentJob['history_libraries'] ?? []) : [];
         if (!$list) {
             return [];
         }

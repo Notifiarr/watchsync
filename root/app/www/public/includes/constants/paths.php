@@ -25,6 +25,8 @@ define('CRON_HOUSEKEEPER_LOG', LOGS_PATH . 'crons/housekeeper.log');
 define('CRON_BACKUP_LOG', LOGS_PATH . 'crons/backup.log');
 define('CRON_SYNC_LOG', LOGS_PATH . 'crons/sync.log');
 
+define('LOG_ROTATE_SIZE', 2);
+
 define('MEMCACHE_HOST', '127.0.0.1');
 define('MEMCACHE_PORT', 11211);
 define('MEMCACHE_PREFIX', 'watchsync-');

@@ -464,10 +464,40 @@ switch ($_POST['event'] ?? '') {
             echo json_encode(['error' => true, 'message' => translate('missingSyncUsers')]);
             exit;
         }
+        $userApps = json_decode($_POST['userApps'] ?? '', true);
+        if (!is_array($userApps)) {
+            $userApps = [];
+        }
+        $scoped = [];
+        foreach ($userIds as $userId) {
+            $apps = $userApps[strval($userId)] ?? ($userApps[$userId] ?? []);
+            if (!is_array($apps)) {
+                continue;
+            }
+            $ids = [];
+            foreach ($apps as $appId) {
+                if (intval($appId)) {
+                    $ids[] = intval($appId);
+                }
+            }
+            if ($ids) {
+                $scoped[strval($userId)] = array_values(array_unique($ids));
+            }
+        }
+        if (!$scoped) {
+            echo json_encode(['error' => true, 'message' => translate('missingSyncUsers')]);
+            exit;
+        }
+        $userIds = [];
+        foreach ($scoped as $userId => $apps) {
+            $userIds[] = intval($userId);
+        }
         if (!in_array($syncMode, [MediaSyncModes::BOTH, MediaSyncModes::PUSH, MediaSyncModes::PULL])) {
             $syncMode = MediaSyncModes::PULL;
         }
-        echo json_encode($cron->start(0, $userIds, $syncMode, MediaSyncTypes::HISTORY, [], 0, 0, !empty($_POST['dryRun']) ? 1 : 0));
+        echo json_encode($cron->start(0, $userIds, $syncMode, MediaSyncTypes::HISTORY, [], 0, 0, !empty($_POST['dryRun']) ? 1 : 0, [
+            'user_apps' => $scoped,
+        ]));
         exit;
 
     case 'history':

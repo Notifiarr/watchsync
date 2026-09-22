@@ -59,6 +59,7 @@ function loggerFlush($logfile = '')
 
         $GLOBALS['loggerQueue'][$file]   = [];
         $GLOBALS['loggerFlushAt'][$file] = time();
+        loggerRotate($file);
     }
 }
 
@@ -94,6 +95,33 @@ function loggerBlock($logfile, $lines)
     fflush($fp);
     flock($fp, LOCK_UN);
     fclose($fp);
+    loggerRotate($logfile);
+}
+
+function loggerRotate($logfile)
+{
+    if (!$logfile || !is_file($logfile)) {
+        return;
+    }
+
+    $rotateSize = LOG_ROTATE_SIZE * pow(1024, 2);
+    clearstatcache(true, $logfile);
+    if (filesize($logfile) < $rotateSize) {
+        return;
+    }
+
+    $suffix        = time() . '-' . getmypid();
+    $rotateAttempt = 0;
+    while (is_file($logfile)) {
+        $rotated = preg_replace('/\.log$/', '-' . $suffix . ($rotateAttempt ? '-' . $rotateAttempt : '') . '.log', $logfile);
+        if (!is_file($rotated) && rename($logfile, $rotated)) {
+            break;
+        }
+        $rotateAttempt++;
+        if ($rotateAttempt > 20) {
+            break;
+        }
+    }
 }
 
 function asciiTable($headers, $rows)

@@ -161,6 +161,7 @@ trait Dispatcher
             $dirs = [
                 LOGS_PATH . 'crons',
                 LOGS_PATH . 'system',
+                LOGS_PATH . 'webhooks',
                 JOBS_PATH,
                 BACKUP_PATH,
             ];
@@ -191,10 +192,61 @@ trait Dispatcher
             if ($removed) {
                 logger(CRON_HOUSEKEEPER_LOG, 'backups removed=' . $removed);
             }
+            $this->purgeOldLogs();
             $this->purgeDeletedUsers();
         } finally {
             $this->removeLockFile($lock);
             logger(CRON_HOUSEKEEPER_LOG, 'housekeeper <-');
+        }
+    }
+
+    public function purgeOldLogs()
+    {
+        global $shell;
+
+        if (intval(date('H')) != 0 || intval(date('i')) > 5) {
+            return;
+        }
+
+        $cleanup = [
+            'crons' => [
+                'message' => 'Cron log file cleanup (daily @ midnight)',
+                'length'  => max(1, intval($this->database->getSetting('cronLogLength') ?: 1)),
+            ],
+            'system' => [
+                'message' => 'System log file cleanup (daily @ midnight)',
+                'length'  => max(1, intval($this->database->getSetting('systemLogLength') ?: 1)),
+            ],
+            'webhooks' => [
+                'message' => 'Webhook log file cleanup (daily @ midnight)',
+                'length'  => max(1, intval($this->database->getSetting('webhookLogLength') ?: 1)),
+            ],
+        ];
+
+        foreach ($cleanup as $group => $settings) {
+            $thisDir = LOGS_PATH . $group . '/';
+            if (!is_dir($thisDir)) {
+                continue;
+            }
+
+            logger(CRON_HOUSEKEEPER_LOG, $settings['message']);
+            logger(CRON_HOUSEKEEPER_LOG, 'Allowed ' . $group . ' log age: ' . $settings['length']);
+
+            $folder = opendir($thisDir);
+            while ($log = readdir($folder)) {
+                $path = $thisDir . $log;
+                if ($log[0] == '.' || is_dir($path) || !isLogFile($log) || str_ends_with($log, '.lock')) {
+                    continue;
+                }
+
+                $daysBetween = daysBetweenDates(date('Ymd', filemtime($path)), date('Ymd'));
+                logger(CRON_HOUSEKEEPER_LOG, 'logfile: ' . $path . ', days: ' . $daysBetween);
+                if ($daysBetween > $settings['length']) {
+                    logger(CRON_HOUSEKEEPER_LOG, 'removing logfile');
+                    $shell->exec('rm -rf ' . escapeshellarg($path));
+                }
+            }
+            closedir($folder);
         }
     }
 

@@ -28,6 +28,17 @@ function isContainerLogFile($name)
     return $name == 'init-database.log' || str_starts_with($name, 'init-database-');
 }
 
+function isSyncJobLogFile($name)
+{
+    $name = basename(strval($name));
+    if (!str_ends_with($name, '.log')) {
+        return false;
+    }
+    $id = substr($name, 0, -4);
+
+    return preg_match('/^(pull|push|both|webhook)-\d{8}-\d{6}(-\d+)?$/', $id) == 1;
+}
+
 function isProtectedLog($relative)
 {
     $relative = str_replace('\\', '/', strval($relative));
@@ -54,7 +65,7 @@ function getLogGroups()
         $groupDir = opendir(LOGS_PATH . $group);
         while ($log = readdir($groupDir)) {
             $path = LOGS_PATH . $group . '/' . $log;
-            if ($log[0] == '.' || is_dir($path) || !isLogFile($log)) {
+            if ($log[0] == '.' || is_dir($path) || !isLogFile($log) || isSyncJobLogFile($log)) {
                 continue;
             }
 

@@ -267,48 +267,6 @@ function refreshMediaAppUserTokens(mediaAppId)
     });
 }
 // ---------------------------------------------------------------------------------------------
-function mediaAppSyncStarted(response)
-{
-    pageLoadingStop();
-    if (!response || response.error) {
-        toast(translate('sync'), (response && response.message) || translate('couldNotSaveSettings'), 'error');
-        return;
-    }
-    toast(translate('sync'), response.message || translate('syncStarted'), 'success');
-}
-// ---------------------------------------------------------------------------------------------
-function startMediaAppLibrarySync(id)
-{
-    pageLoadingStart();
-    $.ajax({
-        url: BASE_URL + 'ajax/sync.php',
-        type: 'post',
-        dataType: 'json',
-        data: '&event=startAppLibrary&id=' + encodeURIComponent(id),
-        success: mediaAppSyncStarted,
-        error: function () {
-            pageLoadingStop();
-            toast(translate('sync'), translate('couldNotSaveSettings'), 'error');
-        }
-    });
-}
-// ---------------------------------------------------------------------------------------------
-function startMediaAppHistorySync(id)
-{
-    pageLoadingStart();
-    $.ajax({
-        url: BASE_URL + 'ajax/sync.php',
-        type: 'post',
-        dataType: 'json',
-        data: '&event=startAppHistory&id=' + encodeURIComponent(id),
-        success: mediaAppSyncStarted,
-        error: function () {
-            pageLoadingStop();
-            toast(translate('sync'), translate('couldNotSaveSettings'), 'error');
-        }
-    });
-}
-// ---------------------------------------------------------------------------------------------
 function openMediaAppRootFolders(id)
 {
     pageLoadingStart();

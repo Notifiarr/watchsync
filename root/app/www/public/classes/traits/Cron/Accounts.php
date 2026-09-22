@@ -15,17 +15,17 @@ trait Accounts
         if ($key == '') {
             $key = strval(intval($user['id'] ?? 0));
         }
-        if ($key == '' || $key == '0' || !empty($this->sidecar['stats']['_deletedSkip'][$key])) {
+        if ($key == '' || $key == '0' || !empty($this->currentJob['stats']['_deletedSkip'][$key])) {
             return;
         }
 
-        $this->sidecar['stats']['_deletedSkip'][$key] = true;
+        $this->currentJob['stats']['_deletedSkip'][$key] = true;
         logger($this->logfile, translate('syncSkipDeletedUser', [strval($user['username'] ?? $key)]));
     }
 
     public function selectedUsers($mediaAppId)
     {
-        $selected = $this->sidecar['user_ids'] ?? [];
+        $selected = $this->currentJob['user_ids'] ?? [];
         $mediaApp = $this->database->getMediaApp($mediaAppId);
         if (!$mediaApp) {
             return [];
@@ -132,14 +132,14 @@ trait Accounts
                 }
                 if ($changed) {
                     $mediaApps->setParitySync('user', $state);
-                    $this->sidecar['user_ids'] = $mediaApps->selectedParityUserIds(false);
+                    $this->currentJob['user_ids'] = $mediaApps->selectedParityUserIds(false);
                 }
             }
         }
 
         $selected = [];
         $jobIds   = [];
-        foreach ($this->sidecar['user_ids'] ?? [] as $userId) {
+        foreach ($this->currentJob['user_ids'] ?? [] as $userId) {
             $userId = intval($userId);
             if ($userId) {
                 $jobIds[] = $userId;
@@ -185,15 +185,15 @@ trait Accounts
                 $existing[strtolower(trim($user['username']))] = $user;
             }
 
-            $created      = 0;
-            $linked       = 0;
-            $unchanged    = 0;
-            $removed      = 0;
-            $skipped      = 0;
-            $passwords    = 0;
-            $accessUsers  = [];
-            $createdNames = [];
-            $linkedNames  = [];
+            $created       = 0;
+            $linked        = 0;
+            $unchanged     = 0;
+            $removed       = 0;
+            $skipped       = 0;
+            $passwords     = 0;
+            $accessUsers   = [];
+            $createdNames  = [];
+            $linkedNames   = [];
             $passwordNames = [];
 
             foreach ($keep as $username => $masterUser) {
@@ -288,12 +288,12 @@ trait Accounts
             if ($created || $linked || $passwords) {
                 $this->database->setMediaAppNeedsSync($listener['id']);
             }
-            $this->sidecar['stats']['created']   = intval($this->sidecar['stats']['created'] ?? 0) + $created;
-            $this->sidecar['stats']['linked']    = intval($this->sidecar['stats']['linked'] ?? 0) + $linked;
-            $this->sidecar['stats']['unchanged'] = intval($this->sidecar['stats']['unchanged'] ?? 0) + $unchanged;
-            $this->sidecar['stats']['removed']   = intval($this->sidecar['stats']['removed'] ?? 0) + $removed;
-            $this->sidecar['stats']['passwords'] = intval($this->sidecar['stats']['passwords'] ?? 0) + $passwords;
-            $this->sidecar['stats']['access']    = intval($this->sidecar['stats']['access'] ?? 0) + intval($access['updated'] ?? 0);
+            $this->currentJob['stats']['created']   = intval($this->currentJob['stats']['created'] ?? 0) + $created;
+            $this->currentJob['stats']['linked']    = intval($this->currentJob['stats']['linked'] ?? 0) + $linked;
+            $this->currentJob['stats']['unchanged'] = intval($this->currentJob['stats']['unchanged'] ?? 0) + $unchanged;
+            $this->currentJob['stats']['removed']   = intval($this->currentJob['stats']['removed'] ?? 0) + $removed;
+            $this->currentJob['stats']['passwords'] = intval($this->currentJob['stats']['passwords'] ?? 0) + $passwords;
+            $this->currentJob['stats']['access']    = intval($this->currentJob['stats']['access'] ?? 0) + intval($access['updated'] ?? 0);
             $this->recordUserParitySummary($listener['name'] ?? '', $created, $removed, $linked, $unchanged);
             foreach ($createdNames as $name) {
                 $this->addParityResult($listener, 'users', 'created', $name);

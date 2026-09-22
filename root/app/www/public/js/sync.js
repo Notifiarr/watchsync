@@ -228,9 +228,13 @@ function toggleSyncAutomatic(el)
     });
 }
 // ---------------------------------------------------------------------------------------------
-function openSyncLibrary()
+function openSyncLibrary(mediaAppId, mediaAppName)
 {
     pageLoadingStart();
+    let title = translate('librarySync');
+    if (mediaAppId && mediaAppName) {
+        title = title + ' - ' + mediaAppName;
+    }
     $.ajax({
         url: BASE_URL + 'ajax/sync.php',
         type: 'post',
@@ -238,12 +242,15 @@ function openSyncLibrary()
         success: function (response) {
             dialogOpen({
                 id: 'sync-library-form',
-                title: translate('librarySync'),
+                title: title,
                 body: response,
                 footer: false,
                 size: 'lg',
                 onOpen: function () {
                     pageLoadingStop();
+                    if (mediaAppId) {
+                        filterSyncLibraryToApp(mediaAppId);
+                    }
                 }
             });
         },
@@ -252,6 +259,22 @@ function openSyncLibrary()
             toast(translate('sync'), translate('unableToLoadPage'), 'error');
         }
     });
+}
+// ---------------------------------------------------------------------------------------------
+function filterSyncLibraryToApp(mediaAppId)
+{
+    let appId = String(mediaAppId || '');
+    if (!appId || !$('#sync-library-form').length) {
+        return;
+    }
+    let prefix = appId + ':';
+    $('#sync-library-form .sync-library').each(function () {
+        let value = String($(this).val() || '');
+        if (value.indexOf(prefix) != 0 || $(this).prop('disabled')) {
+            $(this).prop('checked', false);
+        }
+    });
+    libraryScanUpdateSelectAll();
 }
 // ---------------------------------------------------------------------------------------------
 function openSyncUsers()
@@ -280,9 +303,13 @@ function openSyncUsers()
     });
 }
 // ---------------------------------------------------------------------------------------------
-function openSyncHistory()
+function openSyncHistory(mediaAppId, mediaAppName)
 {
     pageLoadingStart();
+    let title = translate('history');
+    if (mediaAppId && mediaAppName) {
+        title = title + ' - ' + mediaAppName;
+    }
     $.ajax({
         url: BASE_URL + 'ajax/sync.php',
         type: 'post',
@@ -290,12 +317,18 @@ function openSyncHistory()
         success: function (response) {
             dialogOpen({
                 id: 'sync-history-form',
-                title: translate('history'),
+                title: title,
                 body: response,
                 footer: false,
                 size: 'xl',
                 onOpen: function () {
                     pageLoadingStop();
+                    if (mediaAppId) {
+                        filterSyncHistoryToApp(mediaAppId);
+                    } else {
+                        syncHistoryApplyAppScope();
+                        syncHistoryUpdateUserSelectAll();
+                    }
                 }
             });
         },
@@ -303,6 +336,90 @@ function openSyncHistory()
             pageLoadingStop();
             toast(translate('sync'), translate('unableToLoadPage'), 'error');
         }
+    });
+}
+// ---------------------------------------------------------------------------------------------
+function filterSyncHistoryToApp(mediaAppId)
+{
+    let appId = String(mediaAppId || '');
+    if (!appId || !$('#sync-history-form').length) {
+        return;
+    }
+    $('#sync-history-form .sync-history-user').each(function () {
+        let apps = String($(this).attr('data-apps') || '').split(',');
+        let related = false;
+        for (let i = 0; i < apps.length; i++) {
+            if (String(apps[i]) == appId) {
+                related = true;
+                break;
+            }
+        }
+        $(this).prop('checked', related);
+    });
+    syncHistoryApplyAppScope();
+    $('.sync-history-app').each(function () {
+        if (String($(this).attr('data-app') || '') != appId) {
+            $(this).prop('checked', false);
+        }
+    });
+    $('.sync-history-app-all').each(function () {
+        if (String($(this).attr('data-app') || '') != appId) {
+            $(this).prop('checked', false);
+        }
+    });
+    syncHistoryUpdateUserSelectAll();
+    syncHistoryUpdateAppSelectAlls();
+}
+// ---------------------------------------------------------------------------------------------
+function syncHistoryUpdateUserSelectAll()
+{
+    let $users = $('#sync-history-form .sync-history-user');
+    $('#syncHistoryUserAll').prop('checked', $users.length > 0 && $users.filter(':checked').length == $users.length);
+}
+// ---------------------------------------------------------------------------------------------
+function syncHistoryApplyAppScope()
+{
+    $('.sync-history-user').each(function () {
+        syncHistoryApplyUserAppScope($(this).val(), $(this).prop('checked'));
+    });
+    syncHistoryUpdateAppSelectAlls();
+}
+// ---------------------------------------------------------------------------------------------
+function syncHistoryApplyUserAppScope(userId, userChecked)
+{
+    userId = String(userId || '');
+    if (userChecked == null) {
+        userChecked = !!$('.sync-history-user').filter(function () {
+            return String($(this).val()) == userId;
+        }).prop('checked');
+    }
+    $('.sync-history-app').filter(function () {
+        return String($(this).attr('data-user') || '') == userId;
+    }).each(function () {
+        let available = $(this).attr('data-available') == '1';
+        if (!userChecked || !available) {
+            $(this).prop('checked', false);
+            $(this).prop('disabled', true);
+        } else {
+            $(this).prop('disabled', false);
+            $(this).prop('checked', true);
+        }
+    });
+}
+// ---------------------------------------------------------------------------------------------
+function syncHistoryUpdateAppSelectAlls()
+{
+    $('.sync-history-app-all').each(function () {
+        let appId = String($(this).attr('data-app') || '');
+        let $boxes = $('.sync-history-app').filter(function () {
+            return String($(this).attr('data-app') || '') == appId && !$(this).prop('disabled');
+        });
+        if (!$boxes.length) {
+            $(this).prop('checked', false).prop('disabled', true);
+            return;
+        }
+        $(this).prop('disabled', false);
+        $(this).prop('checked', $boxes.filter(':checked').length == $boxes.length);
     });
 }
 // ---------------------------------------------------------------------------------------------
@@ -355,6 +472,30 @@ $(document).on('change', '[id^="syncLibraryAll-"]', function () {
     $(this).closest('.col').find('.sync-library').prop('checked', $(this).prop('checked'));
 });
 // ---------------------------------------------------------------------------------------------
+$(document).on('change', '#syncHistoryUserAll', function () {
+    let checked = $(this).prop('checked');
+    $('.sync-history-user').prop('checked', checked);
+    syncHistoryApplyAppScope();
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('change', '.sync-history-user', function () {
+    syncHistoryApplyUserAppScope($(this).val(), $(this).prop('checked'));
+    syncHistoryUpdateUserSelectAll();
+    syncHistoryUpdateAppSelectAlls();
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('change', '.sync-history-app-all', function () {
+    let appId = String($(this).attr('data-app') || '');
+    let checked = $(this).prop('checked');
+    $('.sync-history-app').filter(function () {
+        return String($(this).attr('data-app') || '') == appId && !$(this).prop('disabled');
+    }).prop('checked', checked);
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('change', '.sync-history-app', function () {
+    syncHistoryUpdateAppSelectAlls();
+});
+// ---------------------------------------------------------------------------------------------
 function startLibrarySync()
 {
     let libraries = [];
@@ -381,8 +522,24 @@ function startLibrarySync()
 function startHistorySync(dryRun)
 {
     let users = [];
+    let userApps = {};
     $('.sync-history-user:checked').each(function () {
-        users.push($(this).val());
+        let userId = String($(this).val() || '');
+        if (!userId) {
+            return;
+        }
+        let apps = [];
+        $('.sync-history-app[data-user="' + userId + '"]:checked').each(function () {
+            let appId = parseInt($(this).attr('data-app'), 10) || 0;
+            if (appId) {
+                apps.push(appId);
+            }
+        });
+        if (!apps.length) {
+            return;
+        }
+        users.push(userId);
+        userApps[userId] = apps;
     });
 
     pageLoadingStart();
@@ -390,7 +547,7 @@ function startHistorySync(dryRun)
         url: BASE_URL + 'ajax/sync.php',
         type: 'post',
         dataType: 'json',
-        data: '&event=startHistory&syncMode=' + encodeURIComponent($('#syncHistoryMode').val() || '') + '&users=' + encodeURIComponent(users.join(',')) + '&dryRun=' + (dryRun ? '1' : ''),
+        data: '&event=startHistory&syncMode=' + encodeURIComponent($('#syncHistoryMode').val() || '') + '&users=' + encodeURIComponent(users.join(',')) + '&userApps=' + encodeURIComponent(JSON.stringify(userApps)) + '&dryRun=' + (dryRun ? '1' : ''),
         success: function (response) {
             syncJobStarted(response, 'sync-history-form');
         },

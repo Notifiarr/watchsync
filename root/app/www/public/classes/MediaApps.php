@@ -878,11 +878,7 @@ class MediaApps
 
     public function sortLibraries($libraries)
     {
-        usort($libraries, function ($a, $b) {
-            return strcasecmp($a['title'] ?? '', $b['title'] ?? '');
-        });
-
-        return $libraries;
+        return $this->database->sortMediaAppLibraries($libraries);
     }
 
     public function libraryPathKey($path)

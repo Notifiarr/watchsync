@@ -388,7 +388,13 @@ $(document).on('click', '.sync-library, .sync-user, .sync-parity-library, .sync-
         let start = $(group).index(lastShiftCheckbox[group]);
         let end   = $(group).index(this);
         if (start > -1 && end > -1) {
-            $(group).slice(Math.min(start, end), Math.max(start, end) + 1).prop('checked', $(this).prop('checked'));
+            let checked = $(this).prop('checked');
+            $(group).slice(Math.min(start, end), Math.max(start, end) + 1).each(function () {
+                if (this == event.currentTarget) {
+                    return;
+                }
+                $(this).prop('checked', checked).trigger('change');
+            });
         }
     }
 

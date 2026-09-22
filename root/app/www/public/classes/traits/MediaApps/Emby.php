@@ -758,7 +758,7 @@ trait Emby
             'NewPw'           => $password,
             'ResetPassword'   => false,
         ]);
-        $curl = curl(sprintf(MediaAppEndpoints::ENDPOINT_EMBY_USER_PASSWORD, $url, rawurlencode($remoteId)), $this->embyHeaders($apikey), 'POST', $payload);
+        $curl    = curl(sprintf(MediaAppEndpoints::ENDPOINT_EMBY_USER_PASSWORD, $url, rawurlencode($remoteId)), $this->embyHeaders($apikey), 'POST', $payload);
         if ($curl['code'] < 200 || $curl['code'] > 299) {
             return ['error' => true, 'message' => $curl['error'] ?: translate('mediaAppUsersFailed')];
         }

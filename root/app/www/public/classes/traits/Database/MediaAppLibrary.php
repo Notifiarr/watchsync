@@ -9,6 +9,19 @@
 
 trait MediaAppLibrary
 {
+    public function sortMediaAppLibraries($libraries)
+    {
+        if (!is_array($libraries)) {
+            return [];
+        }
+
+        usort($libraries, function ($a, $b) {
+            return strcasecmp($a['title'] ?? '', $b['title'] ?? '');
+        });
+
+        return $libraries;
+    }
+
     public function getMediaAppLibraries($mediaAppId)
     {
         $id = intval($mediaAppId);
@@ -35,6 +48,7 @@ trait MediaAppLibrary
             ];
         }
 
+        $libraries                    = $this->sortMediaAppLibraries($libraries);
         $this->appLibrariesCache[$id] = $libraries;
 
         return $libraries;
@@ -82,6 +96,7 @@ trait MediaAppLibrary
             }
         }
 
+        $stored                       = $this->sortMediaAppLibraries($stored);
         $this->appLibrariesCache[$id] = $stored;
 
         return $stored;

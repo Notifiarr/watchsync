@@ -598,7 +598,7 @@ trait Jellyfin
             'NewPw'         => $password,
             'ResetPassword' => false,
         ]);
-        $curl = curl(sprintf(MediaAppEndpoints::ENDPOINT_JELLYFIN_USER_PASSWORD, $url, rawurlencode($remoteId)), $this->jellyfinHeaders($apikey), 'POST', $payload);
+        $curl    = curl(sprintf(MediaAppEndpoints::ENDPOINT_JELLYFIN_USER_PASSWORD, $url, rawurlencode($remoteId)), $this->jellyfinHeaders($apikey), 'POST', $payload);
         if ($curl['code'] < 200 || $curl['code'] > 299) {
             return ['error' => true, 'message' => $curl['error'] ?: translate('mediaAppUsersFailed')];
         }

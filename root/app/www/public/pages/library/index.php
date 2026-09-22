@@ -21,63 +21,63 @@ $libraryStats   = $database->getLibraryUserWatchStats($libraryUsers);
     <div class="col-12 mb-3">
         <div class="card border shadow-sm">
             <button class="library-stats-toggle card-header d-flex align-items-center justify-content-between collapsed"
-                    type="button"
-                    data-bs-toggle="collapse"
-                    data-bs-target="#libraryStatsBody"
-                    aria-expanded="false"
-                    aria-controls="libraryStatsBody">
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#libraryStatsBody"
+                aria-expanded="false"
+                aria-controls="libraryStatsBody">
                 <span><?= htmlEscape(translate('stats')) ?></span>
                 <i class="fa-solid fa-chevron-down library-stats-chevron" aria-hidden="true"></i>
             </button>
             <div id="libraryStatsBody" class="collapse">
                 <div class="card-body">
                     <?php if (!$libraryStats) { ?>
-                                                    <p class="text-body-secondary mb-0"><?= htmlEscape(translate('noMediaAppUsers')) ?></p>
+                        <p class="text-body-secondary mb-0"><?= htmlEscape(translate('noMediaAppUsers')) ?></p>
                     <?php } else { ?>
-                                                    <div class="table-responsive">
-                                                        <table class="table table-sm table-hover align-middle mb-0" id="libraryStatsTable">
-                                                            <thead>
-                                                                <tr>
-                                                                    <th class="library-stats-sort" data-sort="text" scope="col">
-                                                                        <?= htmlEscape(translate('users')) ?>
-                                                                        <i class="fa-solid fa-sort library-stats-sort-icon" aria-hidden="true"></i>
-                                                                    </th>
-                                                                    <th class="library-stats-sort text-end" data-sort="number" scope="col">
-                                                                        <?= htmlEscape(translate('moviesWatched')) ?>
-                                                                        <i class="fa-solid fa-sort library-stats-sort-icon" aria-hidden="true"></i>
-                                                                    </th>
-                                                                    <th class="library-stats-sort text-end" data-sort="number" scope="col">
-                                                                        <?= htmlEscape(translate('moviesInProgress')) ?>
-                                                                        <i class="fa-solid fa-sort library-stats-sort-icon" aria-hidden="true"></i>
-                                                                    </th>
-                                                                    <th class="library-stats-sort text-end" data-sort="number" scope="col">
-                                                                        <?= htmlEscape(translate('episodesWatched')) ?>
-                                                                        <i class="fa-solid fa-sort library-stats-sort-icon" aria-hidden="true"></i>
-                                                                    </th>
-                                                                    <th class="library-stats-sort text-end" data-sort="number" scope="col">
-                                                                        <?= htmlEscape(translate('episodesInProgress')) ?>
-                                                                        <i class="fa-solid fa-sort library-stats-sort-icon" aria-hidden="true"></i>
-                                                                    </th>
-                                                                    <th class="library-stats-sort text-end" data-sort="number" scope="col">
-                                                                        <?= htmlEscape(translate('timeWatched')) ?>
-                                                                        <i class="fa-solid fa-sort library-stats-sort-icon" aria-hidden="true"></i>
-                                                                    </th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                <?php foreach ($libraryStats as $stat) { ?>
-                                                                                                <tr>
-                                                                                                    <td data-value="<?= htmlEscape($stat['username'] ?? '') ?>"><?= htmlEscape((!empty($stat['is_admin']) ? '* ' : '') . ($stat['username'] ?? '')) ?></td>
-                                                                                                    <td class="text-end" data-value="<?= intval($stat['movies_watched']) ?>"><?= number_format(intval($stat['movies_watched'])) ?></td>
-                                                                                                    <td class="text-end" data-value="<?= intval($stat['movies_started']) ?>"><?= number_format(intval($stat['movies_started'])) ?></td>
-                                                                                                    <td class="text-end" data-value="<?= intval($stat['episodes_watched']) ?>"><?= number_format(intval($stat['episodes_watched'])) ?></td>
-                                                                                                    <td class="text-end" data-value="<?= intval($stat['episodes_started']) ?>"><?= number_format(intval($stat['episodes_started'])) ?></td>
-                                                                                                    <td class="text-end" data-value="<?= intval($stat['watch_seconds'] ?? 0) ?>"><?= htmlEscape(formatWatchDuration(intval($stat['watch_seconds'] ?? 0))) ?></td>
-                                                                                                </tr>
-                                                                <?php } ?>
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0" id="libraryStatsTable">
+                                <thead>
+                                    <tr>
+                                        <th class="library-stats-sort" data-sort="text" scope="col">
+                                            <?= htmlEscape(translate('users')) ?>
+                                            <i class="fa-solid fa-sort library-stats-sort-icon" aria-hidden="true"></i>
+                                        </th>
+                                        <th class="library-stats-sort text-end" data-sort="number" scope="col">
+                                            <?= htmlEscape(translate('moviesWatched')) ?>
+                                            <i class="fa-solid fa-sort library-stats-sort-icon" aria-hidden="true"></i>
+                                        </th>
+                                        <th class="library-stats-sort text-end" data-sort="number" scope="col">
+                                            <?= htmlEscape(translate('moviesInProgress')) ?>
+                                            <i class="fa-solid fa-sort library-stats-sort-icon" aria-hidden="true"></i>
+                                        </th>
+                                        <th class="library-stats-sort text-end" data-sort="number" scope="col">
+                                            <?= htmlEscape(translate('episodesWatched')) ?>
+                                            <i class="fa-solid fa-sort library-stats-sort-icon" aria-hidden="true"></i>
+                                        </th>
+                                        <th class="library-stats-sort text-end" data-sort="number" scope="col">
+                                            <?= htmlEscape(translate('episodesInProgress')) ?>
+                                            <i class="fa-solid fa-sort library-stats-sort-icon" aria-hidden="true"></i>
+                                        </th>
+                                        <th class="library-stats-sort text-end" data-sort="number" scope="col">
+                                            <?= htmlEscape(translate('timeWatched')) ?>
+                                            <i class="fa-solid fa-sort library-stats-sort-icon" aria-hidden="true"></i>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($libraryStats as $stat) { ?>
+                                        <tr>
+                                            <td data-value="<?= htmlEscape($stat['username'] ?? '') ?>"><?= htmlEscape((!empty($stat['is_admin']) ? '* ' : '') . ($stat['username'] ?? '')) ?></td>
+                                            <td class="text-end" data-value="<?= intval($stat['movies_watched']) ?>"><?= number_format(intval($stat['movies_watched'])) ?></td>
+                                            <td class="text-end" data-value="<?= intval($stat['movies_started']) ?>"><?= number_format(intval($stat['movies_started'])) ?></td>
+                                            <td class="text-end" data-value="<?= intval($stat['episodes_watched']) ?>"><?= number_format(intval($stat['episodes_watched'])) ?></td>
+                                            <td class="text-end" data-value="<?= intval($stat['episodes_started']) ?>"><?= number_format(intval($stat['episodes_started'])) ?></td>
+                                            <td class="text-end" data-value="<?= intval($stat['watch_seconds'] ?? 0) ?>"><?= htmlEscape(formatWatchDuration(intval($stat['watch_seconds'] ?? 0))) ?></td>
+                                        </tr>
+                                    <?php } ?>
+                                </tbody>
+                            </table>
+                        </div>
                     <?php } ?>
                 </div>
             </div>
@@ -105,7 +105,7 @@ $libraryStats   = $database->getLibraryUserWatchStats($libraryUsers);
                                     continue;
                                 }
                                 ?>
-                                                            <option value="<?= htmlEscape($libKey) ?>"><?= htmlEscape($libraryLib['title'] ?? $libKey) ?></option>
+                                <option value="<?= htmlEscape($libKey) ?>"><?= htmlEscape($libraryLib['title'] ?? $libKey) ?></option>
                             <?php } ?>
                         </select>
                     </div>
@@ -114,7 +114,7 @@ $libraryStats   = $database->getLibraryUserWatchStats($libraryUsers);
                         <select class="form-select" id="libraryUser">
                             <option value="0"><?= htmlEscape(translate('allUsers')) ?></option>
                             <?php foreach ($libraryUsers as $libraryUser) { ?>
-                                                            <option value="<?= intval($libraryUser['id']) ?>"><?= htmlEscape((!empty($libraryUser['is_admin']) ? '* ' : '') . $libraryUser['username']) ?></option>
+                                <option value="<?= intval($libraryUser['id']) ?>"><?= htmlEscape((!empty($libraryUser['is_admin']) ? '* ' : '') . $libraryUser['username']) ?></option>
                             <?php } ?>
                         </select>
                     </div>
@@ -131,7 +131,7 @@ $libraryStats   = $database->getLibraryUserWatchStats($libraryUsers);
                 <div class="library-browser">
                     <div class="library-az" id="libraryAz">
                         <?php foreach ($libraryLetters as $libraryLetter) { ?>
-                                                        <button type="button" class="library-az-letter disabled" data-letter="<?= htmlEscape($libraryLetter) ?>"><?= htmlEscape($libraryLetter) ?></button>
+                            <button type="button" class="library-az-letter disabled" data-letter="<?= htmlEscape($libraryLetter) ?>"><?= htmlEscape($libraryLetter) ?></button>
                         <?php } ?>
                     </div>
                     <div class="library-list-wrap" id="libraryListWrap">

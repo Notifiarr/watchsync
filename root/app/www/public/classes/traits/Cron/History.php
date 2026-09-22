@@ -11,8 +11,8 @@ trait History
 {
     public function watchApps()
     {
-        $mediaAppId = intval($this->sidecar['media_app_id'] ?? 0);
-        $webhook    = intval($this->sidecar['trigger'] ?? 0) == MediaSyncTriggers::WEBHOOK;
+        $mediaAppId = intval($this->currentJob['media_app_id'] ?? 0);
+        $webhook    = intval($this->currentJob['trigger'] ?? 0) == MediaSyncTriggers::WEBHOOK;
         $apps       = [];
         foreach ($this->database->getMediaApps() as $mediaApp) {
             if ($mediaAppId && !$webhook) {
@@ -30,14 +30,36 @@ trait History
         return $apps;
     }
 
+    public function historyUserAppAllowed($masterUserId, $mediaAppId)
+    {
+        $userApps = $this->currentJob['user_apps'] ?? null;
+        if (!is_array($userApps) || !$userApps) {
+            return true;
+        }
+
+        $masterUserId = intval($masterUserId);
+        $mediaAppId   = intval($mediaAppId);
+        $allowed      = $userApps[strval($masterUserId)] ?? ($userApps[$masterUserId] ?? null);
+        if (!is_array($allowed)) {
+            return false;
+        }
+        foreach ($allowed as $appId) {
+            if (intval($appId) == $mediaAppId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function isDryRun()
     {
-        return !empty($this->sidecar['dry_run']);
+        return !empty($this->currentJob['dry_run']);
     }
 
     public function isAutomaticJob()
     {
-        return intval($this->sidecar['trigger'] ?? 0) == MediaSyncTriggers::AUTOMATIC;
+        return intval($this->currentJob['trigger'] ?? 0) == MediaSyncTriggers::AUTOMATIC;
     }
 
     public function syncWatch($mode)
@@ -70,7 +92,7 @@ trait History
                     $ids[] = intval($user['id']);
                 }
                 if ($ids) {
-                    $this->sidecar['user_ids'] = $ids;
+                    $this->currentJob['user_ids'] = $ids;
                 }
             }
         }
@@ -89,8 +111,11 @@ trait History
         $groups = [];
         foreach ($apps as $mediaApp) {
             foreach ($this->selectedUsers($mediaApp['id']) as $user) {
-                $userId              = intval($user['id']);
-                $masterId            = $masters[$userId] ?? $userId;
+                $userId   = intval($user['id']);
+                $masterId = $masters[$userId] ?? $userId;
+                if (!$this->historyUserAppAllowed($masterId, intval($mediaApp['id']))) {
+                    continue;
+                }
                 $groups[$masterId][] = [
                     'app'  => $mediaApp,
                     'user' => $user,
@@ -132,10 +157,10 @@ trait History
     public function logHistoryMissingPin($app, $user)
     {
         $key = intval($app['id'] ?? 0) . ':' . intval($user['id'] ?? 0);
-        if (!empty($this->sidecar['stats']['_pinSkip'][$key])) {
+        if (!empty($this->currentJob['stats']['_pinSkip'][$key])) {
             return;
         }
-        $this->sidecar['stats']['_pinSkip'][$key] = true;
+        $this->currentJob['stats']['_pinSkip'][$key] = true;
         logger($this->logfile, translate('historySkipMissingPin', [strval($user['username'] ?? '')]));
     }
 
@@ -200,7 +225,7 @@ trait History
                 }
             }
         }
-        $this->sidecar['watch_index'] = $index;
+        $this->currentJob['watch_index'] = $index;
 
         return $index;
     }
@@ -421,23 +446,23 @@ trait History
 
     public function recordHistoryLibraryRepair($repair)
     {
-        if (empty($this->sidecar['library_repairs'])) {
-            $this->sidecar['library_repairs'] = [];
+        if (empty($this->currentJob['library_repairs'])) {
+            $this->currentJob['library_repairs'] = [];
         }
         $key = strval($repair['label'] ?? '') . "\0" . strval($repair['app'] ?? '') . "\0" . strval($repair['to'] ?? '');
-        foreach ($this->sidecar['library_repairs'] as $existing) {
+        foreach ($this->currentJob['library_repairs'] as $existing) {
             $existingKey = strval($existing['label'] ?? '') . "\0" . strval($existing['app'] ?? '') . "\0" . strval($existing['to'] ?? '');
             if ($existingKey == $key) {
                 return;
             }
         }
-        $this->sidecar['library_repairs'][] = $repair;
+        $this->currentJob['library_repairs'][] = $repair;
     }
 
     public function historyLibraryRepairLines()
     {
         $lines = [];
-        foreach ($this->sidecar['library_repairs'] ?? [] as $repair) {
+        foreach ($this->currentJob['library_repairs'] ?? [] as $repair) {
             $label = strval($repair['label'] ?? '');
             $app   = strval($repair['app'] ?? '');
             $from  = strval($repair['from'] ?? '');
@@ -866,7 +891,7 @@ trait History
     public function recordAbsentLocalClear($type, $itemId, $item, $row, $app, $user, $cleared, $dry, &$existing, &$dbRows, &$dryPlans, &$counts, &$clearedN)
     {
         $userId  = intval($user['id'] ?? 0);
-        $library = $this->watchLibraryTitle($this->sidecar['watch_index']['libraries'][intval($app['id'])] ?? [], $item['path'] ?? '');
+        $library = $this->watchLibraryTitle($this->currentJob['watch_index']['libraries'][intval($app['id'])] ?? [], $item['path'] ?? '');
         if ($library == '') {
             $library = strval($app['name'] ?? '');
         }
@@ -1011,7 +1036,7 @@ trait History
 
     public function dryRunItemLabel($type, $itemId)
     {
-        $item = $this->sidecar['watch_index'][$type]['id'][intval($itemId)] ?? [];
+        $item = $this->currentJob['watch_index'][$type]['id'][intval($itemId)] ?? [];
         if (!empty($item['label'])) {
             return $item['label'];
         }
@@ -1236,12 +1261,12 @@ trait History
         $lines[] = str_repeat('=', 72);
         $lines[] = '';
 
-        $totals                            = $this->historyTableTotals($tables['dbRows']);
-        $this->sidecar['dry_run_summary']  = $lines;
-        $this->sidecar['stats']['changed'] = intval($this->sidecar['stats']['changed'] ?? 0) + $totals['changed'];
+        $totals                               = $this->historyTableTotals($tables['dbRows']);
+        $this->currentJob['dry_run_summary']  = $lines;
+        $this->currentJob['stats']['changed'] = intval($this->currentJob['stats']['changed'] ?? 0) + $totals['changed'];
         if ($mode == MediaSyncModes::BOTH) {
-            $pushTotals                         = $this->historyTableTotals($tables['pushRows']);
-            $this->sidecar['stats']['changed'] += $pushTotals['changed'];
+            $pushTotals                            = $this->historyTableTotals($tables['pushRows']);
+            $this->currentJob['stats']['changed'] += $pushTotals['changed'];
         }
     }
 
@@ -1375,17 +1400,17 @@ trait History
 
     public function appendSyncSummary($lines)
     {
-        if (!isset($this->sidecar['sync_summary']) || !is_array($this->sidecar['sync_summary'])) {
-            $this->sidecar['sync_summary'] = [];
+        if (!isset($this->currentJob['sync_summary']) || !is_array($this->currentJob['sync_summary'])) {
+            $this->currentJob['sync_summary'] = [];
         }
         foreach ($lines as $line) {
-            $this->sidecar['sync_summary'][] = $line;
+            $this->currentJob['sync_summary'][] = $line;
         }
     }
 
     public function storePushSummary($byApp)
     {
-        if (!empty($this->sidecar['sync_summary'])) {
+        if (!empty($this->currentJob['sync_summary'])) {
             return;
         }
 
@@ -1459,9 +1484,9 @@ trait History
         $lines[] = str_repeat('=', 72);
         $lines[] = '';
 
-        $totals                            = $this->historyTableTotals($rows);
-        $this->sidecar['dry_run_summary']  = $lines;
-        $this->sidecar['stats']['changed'] = intval($this->sidecar['stats']['changed'] ?? 0) + $totals['changed'];
+        $totals                               = $this->historyTableTotals($rows);
+        $this->currentJob['dry_run_summary']  = $lines;
+        $this->currentJob['stats']['changed'] = intval($this->currentJob['stats']['changed'] ?? 0) + $totals['changed'];
     }
 
     public function pushWatchChanges($changes)
@@ -1518,11 +1543,11 @@ trait History
     {
         global $database;
 
-        $payload = $this->sidecar['webhook_item'] ?? [];
+        $payload = $this->currentJob['webhook_item'] ?? [];
         $type    = strval($payload['type'] ?? '');
         $itemId  = intval($payload['item_id'] ?? 0);
         $userId  = intval($payload['user_id'] ?? 0);
-        $appId   = intval($payload['media_app_id'] ?? ($this->sidecar['media_app_id'] ?? 0));
+        $appId   = intval($payload['media_app_id'] ?? ($this->currentJob['media_app_id'] ?? 0));
         $state   = [
             'started'    => intval($payload['started'] ?? 0),
             'inprogress' => intval($payload['inprogress'] ?? 0),
@@ -1541,7 +1566,7 @@ trait History
             return;
         }
 
-        logger($this->logfile, 'webhook ' . strval($this->sidecar['webhook_event'] ?? '') . ' ' . strval($user['username'] ?? ''));
+        logger($this->logfile, 'webhook ' . strval($this->currentJob['webhook_event'] ?? '') . ' ' . strval($user['username'] ?? ''));
         $pushed = webhookPushWatch($app, $user, $item, $type, $state);
         $this->addStat('pushed', $pushed);
         logger($this->logfile, 'watch pushed=' . intval($pushed));
@@ -1572,6 +1597,11 @@ trait History
 
             foreach ($this->selectedUsers($mediaApp['id']) as $user) {
                 $this->stopIfCancelled();
+                $userId   = intval($user['id']);
+                $masterId = $this->watchMasterUserId($userId);
+                if (!$this->historyUserAppAllowed($masterId, $appKey)) {
+                    continue;
+                }
                 if ($this->historyUserMissingPin($user)) {
                     $this->logHistoryMissingPin($mediaApp, $user);
                     continue;

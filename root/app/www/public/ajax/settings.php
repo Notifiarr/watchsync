@@ -48,10 +48,6 @@ try {
             ];
             break;
         case 'saveSyncSettings':
-            $logLevel = strtolower(trim(strval($_POST['logLevel'] ?? 'info')));
-            if ($logLevel != 'debug') {
-                $logLevel = 'info';
-            }
             $parityInterval  = $cron->clampAutomaticInterval(intval($_POST['automaticParityInterval'] ?? MediaSyncIntervals::PARITY));
             $libraryInterval = $cron->clampAutomaticInterval(intval($_POST['automaticLibraryInterval'] ?? MediaSyncIntervals::LIBRARY));
             $historyInterval = $cron->clampAutomaticInterval(intval($_POST['automaticHistoryInterval'] ?? MediaSyncIntervals::HISTORY));
@@ -67,7 +63,22 @@ try {
                 'automaticParityInterval'  => strval($parityInterval),
                 'automaticLibraryInterval' => strval($libraryInterval),
                 'automaticHistoryInterval' => strval($historyInterval),
-                'logLevel'                 => $logLevel,
+            ]);
+            $result = [
+                'error'   => false,
+                'message' => translate('saved'),
+            ];
+            break;
+        case 'saveLogSettings':
+            $logLevel = strtolower(trim(strval($_POST['logLevel'] ?? 'info')));
+            if ($logLevel != 'debug') {
+                $logLevel = 'info';
+            }
+            $database->setSettings([
+                'logLevel'         => $logLevel,
+                'cronLogLength'    => strval(max(1, intval($_POST['cronLogLength'] ?? 1))),
+                'systemLogLength'  => strval(max(1, intval($_POST['systemLogLength'] ?? 1))),
+                'webhookLogLength' => strval(max(1, intval($_POST['webhookLogLength'] ?? 1))),
             ]);
             $result = [
                 'error'   => false,

@@ -81,7 +81,36 @@ function saveSyncSettings()
     payload += '&automaticParityInterval=' + syncIntervalSeconds('#automaticParityHours', '#automaticParityMinutes');
     payload += '&automaticLibraryInterval=' + syncIntervalSeconds('#automaticLibraryHours', '#automaticLibraryMinutes');
     payload += '&automaticHistoryInterval=' + syncIntervalSeconds('#automaticHistoryHours', '#automaticHistoryMinutes');
-    payload += '&logLevel=' + encodeURIComponent($('#syncLogLevel').val() || 'info');
+
+    pageLoadingStart();
+    $.ajax({
+        url: BASE_URL + 'ajax/settings.php',
+        type: 'post',
+        dataType: 'json',
+        data: payload,
+        success: function (response) {
+            pageLoadingStop();
+
+            if (!response || response.error) {
+                toast(translate('settings'), (response && response.message) || translate('couldNotSaveSettings'), 'error');
+                return;
+            }
+            toast(translate('settings'), response.message || translate('saved'), 'success');
+        },
+        error: function () {
+            pageLoadingStop();
+            toast(translate('settings'), translate('couldNotSaveSettings'), 'error');
+        }
+    });
+}
+// ---------------------------------------------------------------------------------------------
+function saveLogSettings()
+{
+    let payload = '&event=saveLogSettings';
+    payload += '&logLevel=' + encodeURIComponent($('#logLevel').val() || 'info');
+    payload += '&cronLogLength=' + encodeURIComponent($('#cronLogLength').val() || '1');
+    payload += '&systemLogLength=' + encodeURIComponent($('#systemLogLength').val() || '1');
+    payload += '&webhookLogLength=' + encodeURIComponent($('#webhookLogLength').val() || '1');
 
     pageLoadingStart();
     $.ajax({

@@ -11,8 +11,8 @@ trait Notify
 {
     public function addStat($key, $amount = 1, $mediaApp = null)
     {
-        $amount                       = intval($amount);
-        $this->sidecar['stats'][$key] = intval($this->sidecar['stats'][$key] ?? 0) + $amount;
+        $amount                          = intval($amount);
+        $this->currentJob['stats'][$key] = intval($this->currentJob['stats'][$key] ?? 0) + $amount;
 
         $name = $this->statAppName($mediaApp);
         if ($name == '') {
@@ -20,7 +20,7 @@ trait Notify
         }
 
         $this->ensureAppBuckets($name);
-        $this->sidecar['stats']['apps'][$name]['media'][$key] = intval($this->sidecar['stats']['apps'][$name]['media'][$key] ?? 0) + $amount;
+        $this->currentJob['stats']['apps'][$name]['media'][$key] = intval($this->currentJob['stats']['apps'][$name]['media'][$key] ?? 0) + $amount;
     }
 
     public function statAppName($mediaApp)
@@ -37,17 +37,17 @@ trait Notify
 
     public function ensureAppBuckets($name)
     {
-        if (!isset($this->sidecar['stats']['apps']) || !is_array($this->sidecar['stats']['apps'])) {
-            $this->sidecar['stats']['apps'] = [];
+        if (!isset($this->currentJob['stats']['apps']) || !is_array($this->currentJob['stats']['apps'])) {
+            $this->currentJob['stats']['apps'] = [];
         }
-        if (!isset($this->sidecar['stats']['apps'][$name]) || !is_array($this->sidecar['stats']['apps'][$name])) {
-            $this->sidecar['stats']['apps'][$name] = [];
+        if (!isset($this->currentJob['stats']['apps'][$name]) || !is_array($this->currentJob['stats']['apps'][$name])) {
+            $this->currentJob['stats']['apps'][$name] = [];
         }
-        if (!isset($this->sidecar['stats']['apps'][$name]['media']) || !is_array($this->sidecar['stats']['apps'][$name]['media'])) {
-            $this->sidecar['stats']['apps'][$name]['media'] = [];
+        if (!isset($this->currentJob['stats']['apps'][$name]['media']) || !is_array($this->currentJob['stats']['apps'][$name]['media'])) {
+            $this->currentJob['stats']['apps'][$name]['media'] = [];
         }
-        if (!isset($this->sidecar['stats']['apps'][$name]['users']) || !is_array($this->sidecar['stats']['apps'][$name]['users'])) {
-            $this->sidecar['stats']['apps'][$name]['users'] = [];
+        if (!isset($this->currentJob['stats']['apps'][$name]['users']) || !is_array($this->currentJob['stats']['apps'][$name]['users'])) {
+            $this->currentJob['stats']['apps'][$name]['users'] = [];
         }
     }
 
@@ -79,13 +79,13 @@ trait Notify
 
         $type = ($type == 'episode' || $type == 'episodes') ? 'episodes' : 'movies';
         $this->ensureAppBuckets($name);
-        if (!isset($this->sidecar['stats']['apps'][$name]['users'][$username]) || !is_array($this->sidecar['stats']['apps'][$name]['users'][$username])) {
-            $this->sidecar['stats']['apps'][$name]['users'][$username] = [];
+        if (!isset($this->currentJob['stats']['apps'][$name]['users'][$username]) || !is_array($this->currentJob['stats']['apps'][$name]['users'][$username])) {
+            $this->currentJob['stats']['apps'][$name]['users'][$username] = [];
         }
-        if (!isset($this->sidecar['stats']['apps'][$name]['users'][$username][$type]) || !is_array($this->sidecar['stats']['apps'][$name]['users'][$username][$type])) {
-            $this->sidecar['stats']['apps'][$name]['users'][$username][$type] = [];
+        if (!isset($this->currentJob['stats']['apps'][$name]['users'][$username][$type]) || !is_array($this->currentJob['stats']['apps'][$name]['users'][$username][$type])) {
+            $this->currentJob['stats']['apps'][$name]['users'][$username][$type] = [];
         }
-        $this->sidecar['stats']['apps'][$name]['users'][$username][$type][$status] = intval($this->sidecar['stats']['apps'][$name]['users'][$username][$type][$status] ?? 0) + $amount;
+        $this->currentJob['stats']['apps'][$name]['users'][$username][$type][$status] = intval($this->currentJob['stats']['apps'][$name]['users'][$username][$type][$status] ?? 0) + $amount;
     }
 
     public function addLibraryResult($mediaApp, $type, $action, $amount = 1)
@@ -99,10 +99,10 @@ trait Notify
         }
 
         $this->ensureAppBuckets($name);
-        if (!isset($this->sidecar['stats']['apps'][$name]['media'][$type]) || !is_array($this->sidecar['stats']['apps'][$name]['media'][$type])) {
-            $this->sidecar['stats']['apps'][$name]['media'][$type] = [];
+        if (!isset($this->currentJob['stats']['apps'][$name]['media'][$type]) || !is_array($this->currentJob['stats']['apps'][$name]['media'][$type])) {
+            $this->currentJob['stats']['apps'][$name]['media'][$type] = [];
         }
-        $this->sidecar['stats']['apps'][$name]['media'][$type][$action] = intval($this->sidecar['stats']['apps'][$name]['media'][$type][$action] ?? 0) + $amount;
+        $this->currentJob['stats']['apps'][$name]['media'][$type][$action] = intval($this->currentJob['stats']['apps'][$name]['media'][$type][$action] ?? 0) + $amount;
     }
 
     public function addParityResult($mediaApp, $group, $action, $label)
@@ -117,10 +117,10 @@ trait Notify
 
         $this->ensureAppBuckets($name);
         $bucket = ($group == 'users') ? 'users' : 'media';
-        if (!isset($this->sidecar['stats']['apps'][$name][$bucket][$action]) || !is_array($this->sidecar['stats']['apps'][$name][$bucket][$action])) {
-            $this->sidecar['stats']['apps'][$name][$bucket][$action] = [];
+        if (!isset($this->currentJob['stats']['apps'][$name][$bucket][$action]) || !is_array($this->currentJob['stats']['apps'][$name][$bucket][$action])) {
+            $this->currentJob['stats']['apps'][$name][$bucket][$action] = [];
         }
-        $this->sidecar['stats']['apps'][$name][$bucket][$action][] = $label;
+        $this->currentJob['stats']['apps'][$name][$bucket][$action][] = $label;
     }
 
     public function syncNotifyLog()
@@ -129,11 +129,11 @@ trait Notify
         if ($log != '') {
             return $log;
         }
-        $log = strval($this->sidecar['log_file'] ?? '');
+        $log = strval($this->currentJob['log_file'] ?? '');
         if ($log != '') {
             return $log;
         }
-        $id = strval($this->sidecar['id'] ?? '');
+        $id = strval($this->currentJob['id'] ?? '');
         if ($id != '' && $this->validJobId($id)) {
             return CRON_LOGS_PATH . $id . '.log';
         }
@@ -146,8 +146,8 @@ trait Notify
         global $notifications, $mediaApps;
 
         $log    = $this->syncNotifyLog();
-        $status = strval($this->sidecar['status'] ?? '');
-        $jobId  = strval($this->sidecar['id'] ?? '');
+        $status = strval($this->currentJob['status'] ?? '');
+        $jobId  = strval($this->currentJob['id'] ?? '');
         if ($status != 'finished' && $status != 'cancelled' && $status != 'error') {
             logger($log, 'notification ' . $trigger . ' skipped: status=' . ($status != '' ? $status : 'empty') . ($jobId != '' ? ' id=' . $jobId : ''));
             return;
@@ -158,7 +158,7 @@ trait Notify
             return;
         }
 
-        $job       = $this->sidecar;
+        $job       = $this->currentJob;
         $syncType  = intval($job['sync_type'] ?? MediaSyncTypes::USERS);
         $libraries = [];
         foreach ($job['libraries'] ?? [] as $library) {
@@ -225,9 +225,9 @@ trait Notify
         if ($trigger == 'syncWebhook') {
             $payload['mediaApps'] = $apps ? implode(', ', $apps) : translate('allMediaApps');
         } else {
-            if (isset($this->sidecar['stats']['_historySeen'])) {
-                unset($this->sidecar['stats']['_historySeen']);
-                $stats = $this->sidecar['stats'];
+            if (isset($this->currentJob['stats']['_historySeen'])) {
+                unset($this->currentJob['stats']['_historySeen']);
+                $stats = $this->currentJob['stats'];
             }
             $payload['mediaApps'] = $this->syncEndMediaApps($stats, $apps);
         }
@@ -319,7 +319,7 @@ trait Notify
 
     public function syncHadChanges()
     {
-        $stats = is_array($this->sidecar['stats'] ?? null) ? $this->sidecar['stats'] : [];
+        $stats = is_array($this->currentJob['stats'] ?? null) ? $this->currentJob['stats'] : [];
         foreach (['changed', 'added', 'updated', 'pushed', 'created', 'linked', 'removed', 'passwords'] as $key) {
             if (intval($stats[$key] ?? 0) > 0) {
                 return true;
@@ -411,13 +411,13 @@ trait Notify
             $sections[] = ['LIBRARY', ['App', 'Kind', 'Added', 'Updated'], $library];
         }
         $parity = [];
-        if (empty($this->sidecar['sync_accounts'])) {
+        if (empty($this->currentJob['sync_accounts'])) {
             $parity = $this->paritySummaryRows();
         }
         if ($parity) {
             $sections[] = ['PARITY', ['App', 'Group', 'Created', 'Linked', 'Removed'], $parity];
         }
-        if (!empty($this->sidecar['sync_accounts'])) {
+        if (!empty($this->currentJob['sync_accounts'])) {
             $sections[] = ['USERS', ['App', 'Added', 'Removed', 'Linked', 'Unchanged'], $this->userParitySummaryRows()];
         }
 
@@ -430,8 +430,8 @@ trait Notify
         foreach ($this->syncSummarySettingLines() as $line) {
             $lines[] = $line;
         }
-        if (!$sections && empty($this->sidecar['sync_summary']) && empty($this->sidecar['sync_accounts'])) {
-            $stats   = is_array($this->sidecar['stats'] ?? null) ? $this->sidecar['stats'] : [];
+        if (!$sections && empty($this->currentJob['sync_summary']) && empty($this->currentJob['sync_accounts'])) {
+            $stats   = is_array($this->currentJob['stats'] ?? null) ? $this->currentJob['stats'] : [];
             $lines[] = '';
             foreach (asciiTable(['Added', 'Updated', 'Unchanged', 'Pulled', 'Pushed', 'Created', 'Linked'], [[
                 intval($stats['added'] ?? 0),
@@ -452,7 +452,7 @@ trait Notify
                 $lines[] = $line;
             }
         }
-        foreach ($this->sidecar['sync_summary'] ?? [] as $line) {
+        foreach ($this->currentJob['sync_summary'] ?? [] as $line) {
             $lines[] = $line;
         }
         $lines[] = str_repeat('=', 72);
@@ -465,7 +465,7 @@ trait Notify
     {
         global $mediaApps;
 
-        $job       = $this->sidecar;
+        $job       = $this->currentJob;
         $syncType  = intval($job['sync_type'] ?? MediaSyncTypes::USERS);
         $libraries = [];
         foreach ($job['libraries'] ?? [] as $library) {
@@ -520,7 +520,7 @@ trait Notify
     public function librarySummaryRows()
     {
         $rows  = [];
-        $apps  = $this->sidecar['stats']['apps'] ?? [];
+        $apps  = $this->currentJob['stats']['apps'] ?? [];
         $types = ['movies', 'series', 'episodes'];
         if (!is_array($apps)) {
             return $rows;
@@ -547,7 +547,7 @@ trait Notify
     public function paritySummaryRows()
     {
         $rows = [];
-        $apps = $this->sidecar['stats']['apps'] ?? [];
+        $apps = $this->currentJob['stats']['apps'] ?? [];
         if (!is_array($apps)) {
             return $rows;
         }
@@ -579,10 +579,10 @@ trait Notify
 
     public function recordUserParitySummary($app, $added, $removed, $linked, $unchanged)
     {
-        if (!isset($this->sidecar['stats']['user_parity']) || !is_array($this->sidecar['stats']['user_parity'])) {
-            $this->sidecar['stats']['user_parity'] = [];
+        if (!isset($this->currentJob['stats']['user_parity']) || !is_array($this->currentJob['stats']['user_parity'])) {
+            $this->currentJob['stats']['user_parity'] = [];
         }
-        $this->sidecar['stats']['user_parity'][] = [
+        $this->currentJob['stats']['user_parity'][] = [
             $app != '' ? $app : '-',
             intval($added),
             intval($removed),
@@ -593,7 +593,7 @@ trait Notify
 
     public function userParitySummaryRows()
     {
-        $rows = $this->sidecar['stats']['user_parity'] ?? [];
+        $rows = $this->currentJob['stats']['user_parity'] ?? [];
 
         return is_array($rows) ? $rows : [];
     }
