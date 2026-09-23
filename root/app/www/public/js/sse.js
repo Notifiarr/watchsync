@@ -203,6 +203,10 @@ function initializeSSE(logId)
         } catch (e) {
             return;
         }
+        if (payload && payload.logged_out) {
+            window.location.reload();
+            return;
+        }
 
         if (typeof payload.offset != 'undefined') {
             $('#sync-log-dialog #syncLogLines').attr('data-offset', payload.offset);

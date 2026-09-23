@@ -423,13 +423,35 @@ trait History
             return [];
         }
 
+        $flagName   = $this->database->mediaLibraryFlag($listenerPlatform);
+        $remoteName = $this->database->mediaLibraryRemoteField($listenerPlatform);
+        $beforeFlag = !empty($item['flag'][$listenerPlatform]);
+        $beforeRemote = trim(strval($item['remote'][$listenerPlatform] ?? ''));
         $this->database->setMediaLibraryPlatformById($table, $listenerPlatform, $liveRemote, $fixedPath, $itemId);
+        $saved = $type == 'movie' ? $this->database->getMovie($itemId) : $this->database->getEpisode($itemId);
+        if (!$saved) {
+            return [];
+        }
+        $savedFlag   = intval($saved[$flagName] ?? 0);
+        $savedRemote = trim(strval($saved[$remoteName] ?? ''));
+        if (!$savedFlag || $savedRemote != $liveRemote) {
+            logger($this->logfile, 'history link repair failed id=' . $itemId . ' type=' . $type
+                . ' app=' . strval($listenerApp['name'] ?? '') . ' remote=' . $liveRemote);
+            loggerFlush($this->logfile);
+            return [];
+        }
+
         $item['flag'][$listenerPlatform]                        = 1;
-        $item['remote'][$listenerPlatform]                      = $liveRemote;
+        $item['remote'][$listenerPlatform]                      = $savedRemote;
+        $item['path']                                           = strval($saved['path'] ?? $fixedPath);
         $index[$type]['id'][$itemId]                            = $item;
-        $index[$type]['remote'][$listenerPlatform][$liveRemote] = $item;
+        $index[$type]['remote'][$listenerPlatform][$savedRemote] = $item;
+        $linkedNow = !$beforeFlag || $beforeRemote == '' || $beforeRemote != $savedRemote;
+        if (!$linkedNow && !$pathChanged) {
+            return $item;
+        }
         logger($this->logfile, 'history link repair id=' . $itemId . ' type=' . $type
-            . ' app=' . strval($listenerApp['name'] ?? '') . ' remote=' . $liveRemote);
+            . ' app=' . strval($listenerApp['name'] ?? '') . ' remote=' . $savedRemote);
         loggerFlush($this->logfile);
         $this->recordHistoryLibraryRepair([
             'label'        => strval($item['label'] ?? ($type . ' #' . $itemId)),
@@ -437,8 +459,8 @@ trait History
             'to'           => $fixedPath,
             'app'          => strval($listenerApp['name'] ?? ''),
             'path_changed' => $pathChanged,
-            'linked'       => true,
-            'remote'       => $liveRemote,
+            'linked'       => $linkedNow,
+            'remote'       => $savedRemote,
         ]);
 
         return $item;
@@ -532,23 +554,28 @@ trait History
             'remote_id' => $seriesRemote,
             'title'     => strval($series['title'] ?? ''),
         ]);
-        $byCode = [];
+        $byCode = '';
         foreach ($items['episodes'] ?? [] as $live) {
+            $liveRemote = trim(strval($live['remote_id'] ?? ''));
+            if ($liveRemote == '') {
+                continue;
+            }
             $livePath = $this->database->normalizeLibraryPath($live['path'] ?? '');
             if (
-                $livePath != '' && (
+                $livePath != ''
+                && (
                     strcasecmp($livePath, $path) == 0
                     || ($pathKey != '' && $this->database->pathSlashlessKey($livePath) == $pathKey)
                 )
             ) {
-                return trim(strval($live['remote_id'] ?? ''));
+                return $liveRemote;
             }
             if (intval($live['season'] ?? 0) == $season && intval($live['episode'] ?? 0) == $epnum) {
-                $byCode = $live;
+                $byCode = $liveRemote;
             }
         }
-        if ($byCode) {
-            return trim(strval($byCode['remote_id'] ?? ''));
+        if ($byCode != '') {
+            return $byCode;
         }
 
         return '';

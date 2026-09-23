@@ -1,5 +1,14 @@
 var BASE_URL = window.APP_BASE || '';
 
+$(document).ajaxComplete(function (event, xhr) {
+    try {
+        let data = JSON.parse(xhr.responseText || '');
+        if (data && data.logged_out) {
+            window.location.reload();
+        }
+    } catch (e) {}
+});
+
 $(function () {
     const savedTheme = localStorage.getItem("theme");
     const initialTheme = savedTheme || "dark";

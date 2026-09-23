@@ -33,9 +33,8 @@ while (ob_get_level()) {
 ob_implicit_flush(true);
 
 if (IS_GUEST) {
-    echo 'data: ' . json_encode([]) . "\n\n";
-    flush();
-    exit;
+    echo 'data: ';
+    loggedOutResponse();
 }
 
 $jobId = $_GET['log'] ?? '';

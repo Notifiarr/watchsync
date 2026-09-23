@@ -445,13 +445,8 @@ trait Emby
         $itemCode = intval($itemCurl['code'] ?? 0);
         if ($itemCode < 200 || $itemCode >= 300) {
             global $cron;
-            if ($itemCode == 404) {
-                $cleared = $this->database->clearMediaLibraryRemote(MediaPlatforms::EMBY, $remoteId);
-                if (!empty($cron)) {
-                    $cron->log('emby skip setWatchStatus item=' . $remoteId . ' user=' . $userId . ' missing_or_inaccessible cleared=' . intval($cleared));
-                }
-            } else if (!empty($cron)) {
-                $cron->log('emby skip setWatchStatus item=' . $remoteId . ' user=' . $userId . ' missing_or_inaccessible');
+            if (!empty($cron)) {
+                $cron->log('emby skip setWatchStatus item=' . $remoteId . ' user=' . $userId . ' missing_or_inaccessible code=' . $itemCode);
             }
             return;
         }

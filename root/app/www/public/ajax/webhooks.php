@@ -23,10 +23,8 @@ if (!defined('RELATIVE_PATH')) {
 
 require RELATIVE_PATH . 'loader.php';
 
-if (IS_GUEST) {
-    echo json_encode(['error' => true, 'message' => translate('notSignedIn')]);
-    exit;
-}
+loggedOutResponse();
+
 
 $result = [
     'error'   => true,

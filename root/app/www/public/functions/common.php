@@ -43,6 +43,16 @@ function translate(string $key, array $args = []): string
     return $localization->translate($key, $args);
 }
 
+function loggedOutResponse()
+{
+    if (!IS_GUEST) {
+        return;
+    }
+
+    echo json_encode(['error' => true, 'logged_out' => true, 'message' => translate('notSignedIn')]) . "\n\n";
+    exit;
+}
+
 function setFile($path, $data)
 {
     $dir = dirname($path);
