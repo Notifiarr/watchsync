@@ -307,6 +307,84 @@ try {
                 'html'  => ob_get_clean(),
             ];
             break;
+        case 'browseDatabase':
+            $browseView = strval($_POST['view'] ?? 'list');
+            $result     = [
+                'error' => true,
+                'message' => translate('browseDatabaseFailed'),
+            ];
+
+            switch ($browseView) {
+                case 'list':
+                    $browseSummary = $database->browseTablesSummary();
+                    ob_start();
+                    require RELATIVE_PATH . 'pages/settings/browseDatabase.php';
+                    $result = [
+                        'error' => false,
+                        'html'  => ob_get_clean(),
+                    ];
+                    break;
+                case 'table':
+                    $browse = $database->browseTablePage($_POST['table'] ?? '', $_POST['page'] ?? 1, 25);
+                    if (!empty($browse['error'])) {
+                        $result = [
+                            'error'   => true,
+                            'message' => $browse['message'] ?? translate('browseDatabaseFailed'),
+                        ];
+                        break;
+                    }
+                    ob_start();
+                    require RELATIVE_PATH . 'pages/settings/browseDatabase.php';
+                    $result = [
+                        'error'   => false,
+                        'html'    => ob_get_clean(),
+                        'page'    => intval($browse['page'] ?? 1),
+                        'pages'   => intval($browse['pages'] ?? 1),
+                        'total'   => intval($browse['total'] ?? 0),
+                        'perPage' => intval($browse['perPage'] ?? 25),
+                    ];
+                    break;
+                case 'schema':
+                    $browse = $database->browseTableSchema($_POST['table'] ?? '');
+                    if (!empty($browse['error'])) {
+                        $result = [
+                            'error'   => true,
+                            'message' => $browse['message'] ?? translate('browseDatabaseSchemaFailed'),
+                        ];
+                        break;
+                    }
+                    ob_start();
+                    require RELATIVE_PATH . 'pages/settings/browseDatabase.php';
+                    $result = [
+                        'error' => false,
+                        'html'  => ob_get_clean(),
+                        'table' => strval($browse['table'] ?? ''),
+                    ];
+                    break;
+                case 'query':
+                    $browse = $database->browseRunQuery($_POST['sql'] ?? '', 500);
+                    if (!empty($browse['error'])) {
+                        $result = [
+                            'error'   => true,
+                            'message' => $browse['message'] ?? translate('browseDatabaseQueryFailed'),
+                        ];
+                        break;
+                    }
+                    ob_start();
+                    require RELATIVE_PATH . 'pages/settings/browseDatabase.php';
+                    $result = [
+                        'error' => false,
+                        'html'  => ob_get_clean(),
+                    ];
+                    break;
+                default:
+                    $result = [
+                        'error'   => true,
+                        'message' => translate('browseDatabaseFailed'),
+                    ];
+                    break;
+            }
+            break;
         case 'downloadBackup':
             $folder = basename($_REQUEST['folder'] ?? '');
             $run    = basename($_REQUEST['run'] ?? '');

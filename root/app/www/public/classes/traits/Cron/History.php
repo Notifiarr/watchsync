@@ -428,15 +428,25 @@ trait History
         $beforeFlag = !empty($item['flag'][$listenerPlatform]);
         $beforeRemote = trim(strval($item['remote'][$listenerPlatform] ?? ''));
         $this->database->setMediaLibraryPlatformById($table, $listenerPlatform, $liveRemote, $fixedPath, $itemId);
-        $saved = $type == 'movie' ? $this->database->getMovie($itemId) : $this->database->getEpisode($itemId);
+        $dbError = trim(strval($this->database->getLastError()));
+        $saved   = $type == 'movie' ? $this->database->getMovie($itemId) : $this->database->getEpisode($itemId);
         if (!$saved) {
             return [];
         }
         $savedFlag   = intval($saved[$flagName] ?? 0);
         $savedRemote = trim(strval($saved[$remoteName] ?? ''));
         if (!$savedFlag || $savedRemote != $liveRemote) {
+            $owner    = $type == 'movie'
+                ? $this->database->getMovieByRemoteId($listenerPlatform, $liveRemote)
+                : $this->database->getEpisodeByRemoteId($listenerPlatform, $liveRemote);
+            $ownerId  = intval($owner['id'] ?? 0);
+            $reason   = $dbError != '' ? $dbError : 'remote not saved';
+            if ($ownerId && $ownerId != $itemId) {
+                $reason = 'unique remote already on id=' . $ownerId;
+            }
             logger($this->logfile, 'history link repair failed id=' . $itemId . ' type=' . $type
-                . ' app=' . strval($listenerApp['name'] ?? '') . ' remote=' . $liveRemote);
+                . ' app=' . strval($listenerApp['name'] ?? '') . ' remote=' . $liveRemote
+                . ' reason=' . $reason);
             loggerFlush($this->logfile);
             return [];
         }
@@ -813,7 +823,7 @@ trait History
     public function clearAbsentLocalWatchLinks($members, $index, &$existing, $incoming, $dry, $debug, &$dbRows, &$pushRows, &$dryPlans, &$counts)
     {
         if (!empty($this->currentJob['history_libraries'])) {
-            logger($this->logfile, 'skip local clear: history library scope is not authoritative for absences');
+            logger($this->logfile, 'skip local clear: history sync wont mess with media library data');
             loggerFlush($this->logfile);
 
             return;

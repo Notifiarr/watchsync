@@ -46,6 +46,7 @@ $syncSettings                        = [
 
 $intervalHourOptions   = range(0, 24);
 $intervalMinuteOptions = [0, 15, 30, 45];
+$browseSummary         = $database->browseTablesSummary();
 
 ?>
 <div class="row">
@@ -81,7 +82,7 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <div><?= htmlEscape($appliedMigration['number'] . ($appliedMigration['name'] != '' ? ' ' . $appliedMigration['name'] : '')) ?></div>
                             </div>
                         </div>
-                        <div class="card border">
+                        <div class="card border mb-4">
                             <div class="card-body">
                                 <h2 class="h5 mb-3"><?= htmlEscape(translate('backups')) ?></h2>
                                 <div class="mb-3">
@@ -108,6 +109,23 @@ $intervalMinuteOptions = [0, 15, 30, 45];
                                 <div id="backupList" class="mt-4">
                                     <?php require RELATIVE_PATH . 'pages/settings/backupList.php'; ?>
                                 </div>
+                            </div>
+                        </div>
+                        <div class="card border">
+                            <div class="card-body">
+                                <h2 class="h5 mb-3"><?= htmlEscape(translate('browse')) ?></h2>
+                                <div id="browseDatabaseList">
+                                    <?php
+                                    $browseView = 'list';
+                                    require RELATIVE_PATH . 'pages/settings/browseDatabase.php';
+                                    ?>
+                                </div>
+                                <h2 class="h5 mt-4 mb-3"><?= htmlEscape(translate('query')) ?></h2>
+                                <div class="input-group mb-3">
+                                    <input type="text" class="form-control font-monospace" id="browseDatabaseQuery" placeholder="<?= htmlEscape(translate('browseDatabaseQueryPlaceholder')) ?>" onkeydown="if (event.key == 'Enter') { runDatabaseQuery(); }">
+                                    <button type="button" class="btn btn-primary" onclick="runDatabaseQuery();"><?= htmlEscape(translate('run')) ?></button>
+                                </div>
+                                <div id="browseDatabaseQueryResult"></div>
                             </div>
                         </div>
                     </div>

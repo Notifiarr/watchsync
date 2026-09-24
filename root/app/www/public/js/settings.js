@@ -397,3 +397,145 @@ function restoreBackup(folder, run)
         }
     });
 }
+// ---------------------------------------------------------------------------------------------
+var browseDatabaseTable = '';
+var browseDatabasePage = 1;
+var browseDatabasePages = 1;
+// ---------------------------------------------------------------------------------------------
+function viewDatabaseBrowse(table, page)
+{
+    table = table || browseDatabaseTable || '';
+    if (!table) {
+        return;
+    }
+
+    page = parseInt(page, 10) || 1;
+    if (page < 1) {
+        page = 1;
+    }
+
+    browseDatabaseTable = table;
+    pageLoadingStart();
+    $.ajax({
+        url: BASE_URL + 'ajax/settings.php',
+        type: 'post',
+        dataType: 'json',
+        data: '&event=browseDatabase&view=table&table=' + encodeURIComponent(table) + '&page=' + encodeURIComponent(page),
+        success: function (response) {
+            pageLoadingStop();
+
+            if (!response || response.error) {
+                toast(translate('browse'), (response && response.message) || translate('browseDatabaseFailed'), 'error');
+                return;
+            }
+
+            browseDatabasePage = parseInt(response.page, 10) || 1;
+            browseDatabasePages = parseInt(response.pages, 10) || 1;
+
+            if ($('#browse-database-dialog').length && $('#browse-database-dialog').is(':visible')) {
+                $('#browse-database-dialog .modal-title').text(table);
+                $('#browse-database-dialog .modal-body').html(response.html || '');
+                return;
+            }
+
+            dialogOpen({
+                id: 'browse-database-dialog',
+                title: table,
+                body: response.html || '',
+                footer: false,
+                size: 'xxl',
+                onOpen: function () {
+                    $('#browse-database-dialog .modal-dialog').removeClass('modal-dialog-scrollable');
+                    $('#browse-database-dialog .modal-body').addClass('browse-database-modal-body');
+                }
+            });
+        },
+        error: function () {
+            pageLoadingStop();
+            toast(translate('browse'), translate('browseDatabaseFailed'), 'error');
+        }
+    });
+}
+// ---------------------------------------------------------------------------------------------
+function viewDatabaseSchema(table)
+{
+    table = table || '';
+    if (!table) {
+        return;
+    }
+
+    pageLoadingStart();
+    $.ajax({
+        url: BASE_URL + 'ajax/settings.php',
+        type: 'post',
+        dataType: 'json',
+        data: '&event=browseDatabase&view=schema&table=' + encodeURIComponent(table),
+        success: function (response) {
+            pageLoadingStop();
+
+            if (!response || response.error) {
+                toast(translate('schema'), (response && response.message) || translate('browseDatabaseSchemaFailed'), 'error');
+                return;
+            }
+
+            dialogOpen({
+                id: 'browse-database-schema-dialog',
+                title: translate('schema') + ': ' + table,
+                body: response.html || '',
+                footer: false,
+                size: 'lg'
+            });
+        },
+        error: function () {
+            pageLoadingStop();
+            toast(translate('schema'), translate('browseDatabaseSchemaFailed'), 'error');
+        }
+    });
+}
+// ---------------------------------------------------------------------------------------------
+function browseDatabasePrev()
+{
+    if (browseDatabasePage <= 1) {
+        return;
+    }
+    viewDatabaseBrowse(browseDatabaseTable, browseDatabasePage - 1);
+}
+// ---------------------------------------------------------------------------------------------
+function browseDatabaseNext()
+{
+    if (browseDatabasePage >= browseDatabasePages) {
+        return;
+    }
+    viewDatabaseBrowse(browseDatabaseTable, browseDatabasePage + 1);
+}
+// ---------------------------------------------------------------------------------------------
+function runDatabaseQuery()
+{
+    let sql = ($('#browseDatabaseQuery').val() || '').trim();
+    if (!sql) {
+        toast(translate('query'), translate('browseDatabaseQueryRequired'), 'error');
+        return;
+    }
+
+    pageLoadingStart();
+    $.ajax({
+        url: BASE_URL + 'ajax/settings.php',
+        type: 'post',
+        dataType: 'json',
+        data: '&event=browseDatabase&view=query&sql=' + encodeURIComponent(sql),
+        success: function (response) {
+            pageLoadingStop();
+
+            if (!response || response.error) {
+                toast(translate('query'), (response && response.message) || translate('browseDatabaseQueryFailed'), 'error');
+                return;
+            }
+
+            $('#browseDatabaseQueryResult').html(response.html || '');
+        },
+        error: function () {
+            pageLoadingStop();
+            toast(translate('query'), translate('browseDatabaseQueryFailed'), 'error');
+        }
+    });
+}

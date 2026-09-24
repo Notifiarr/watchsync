@@ -29,6 +29,7 @@ class Database
     use UserEpisodeLink;
     use SyncHistory;
     use Settings;
+    use DatabaseBrowse;
 
     public    $db;
     public    $notificationPlatformTable;

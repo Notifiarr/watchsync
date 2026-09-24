@@ -1328,17 +1328,18 @@ trait Jobs
             return false;
         }
         $libraries = array_values($this->currentJob['history_libraries'] ?? []);
-        if (!$libraries) {
-            logger($log, 'no new libraries found, skipping auto history sync');
+        $movies    = 0;
+        $series    = 0;
+        $episodes  = 0;
+        foreach ($this->currentJob['stats']['apps'] ?? [] as $appStats) {
+            $movies   += intval($appStats['media']['movies']['added'] ?? 0);
+            $series   += intval($appStats['media']['series']['added'] ?? 0);
+            $episodes += intval($appStats['media']['episodes']['added'] ?? 0);
+        }
+        if (!$libraries || ($movies + $series + $episodes) <= 0) {
+            logger($log, 'nothing new found, skipping auto history sync');
             return false;
         }
-
-        $ids = [];
-        foreach ($libraries as $library) {
-            $ids[] = strval($library['key'] ?? '');
-        }
-        $ids = array_values(array_filter($ids, fn($id) => $id != ''));
-        logger($log, count($libraries) . ' new libraries found, queuing history sync for libraries: ' . implode(', ', $ids));
 
         $master = $mediaApps->masterMediaApp();
         if (!$master) {
@@ -1364,6 +1365,8 @@ trait Jobs
         if (!$job) {
             return false;
         }
+
+        logger($log, 'new movies: ' . $movies . ', new series: ' . $series . ', new episodes: ' . $episodes . ' -> history sync queued');
 
         return true;
     }
