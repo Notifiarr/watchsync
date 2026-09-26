@@ -1613,7 +1613,11 @@ trait History
         logger($this->logfile, 'webhook ' . strval($this->currentJob['webhook_event'] ?? '') . ' ' . strval($user['username'] ?? ''));
         $pushed = webhookPushWatch($app, $user, $item, $type, $state);
         $this->addStat('pushed', $pushed);
-        logger($this->logfile, 'watch pushed=' . intval($pushed));
+        $destinations = $this->currentJob['destination_apps'] ?? [];
+        if (!is_array($destinations)) {
+            $destinations = [];
+        }
+        logger($this->logfile, 'watch pushed=' . intval($pushed) . ($destinations ? ' destinations=' . implode(', ', $destinations) : ''));
     }
 
     public function pushWatch($apps = null)

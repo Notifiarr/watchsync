@@ -615,7 +615,8 @@ function webhookPushWatch($sourceApp, $sourceUser, $item, $type, $state)
 {
     global $database, $mediaApps, $cron;
 
-    $pushed       = 0;
+    $pushed        = 0;
+    $destinations = [];
     $sourceUserId = intval($sourceUser['id'] ?? 0);
     $masterId     = $cron->watchMasterUserId($sourceUserId);
     $userIds      = [$masterId];
@@ -649,7 +650,15 @@ function webhookPushWatch($sourceApp, $sourceUser, $item, $type, $state)
             $database->upsertUserEpisodeLink($item['id'], $userId, $platform, $state['started'], $state['inprogress'], $state['finished']);
         }
         $mediaApps->setWatchStatus($linkedApp, $linkedUser, $remoteId, $state['started'], $state['inprogress'], $state['finished']);
+        $name = trim(strval($linkedApp['name'] ?? ''));
+        if ($name != '' && !in_array($name, $destinations)) {
+            $destinations[] = $name;
+        }
         $pushed++;
+    }
+
+    if (!empty($cron->currentJob['webhook_item'])) {
+        $cron->currentJob['destination_apps'] = $destinations;
     }
 
     return $pushed;

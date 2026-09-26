@@ -855,8 +855,13 @@ trait Jobs
         }
 
         $this->currentJob                  = $job;
-        $this->currentJob['webhook_event'] = strval($event);
-        $this->currentJob['webhook_item']  = [
+        $incoming = webhookLogPayload(is_array($_POST) ? $_POST : []);
+        if (!is_array($incoming)) {
+            $incoming = [];
+        }
+        $this->currentJob['webhook_event']   = strval($event);
+        $this->currentJob['webhook_payload'] = $incoming;
+        $this->currentJob['webhook_item']    = [
             'type'         => strval($type),
             'item_id'      => intval($item['id'] ?? 0),
             'user_id'      => intval($userId),

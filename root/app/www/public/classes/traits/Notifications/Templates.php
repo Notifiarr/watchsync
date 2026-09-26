@@ -35,15 +35,18 @@ trait NotificationTemplates
                 ];
             case 'syncWebhook':
                 return [
-                    'event'     => '',
-                    'id'        => '',
-                    'type'      => '',
-                    'trigger'   => '',
-                    'mode'      => '',
-                    'libraries' => '',
-                    'users'     => '',
-                    'mediaApps' => '',
-                    'scan'      => '',
+                    'event'         => '',
+                    'id'            => '',
+                    'type'          => '',
+                    'trigger'       => '',
+                    'mode'          => '',
+                    'libraries'     => '',
+                    'users'         => '',
+                    'mediaApp'      => '',
+                    'scan'          => '',
+                    'sourceApp'        => '',
+                    'sourcePayload'    => [],
+                    'destinationApps'  => [],
                 ];
             case 'syncOverview':
                 return [
@@ -54,9 +57,12 @@ trait NotificationTemplates
                     'mode'      => '',
                     'status'    => '',
                     'runtime'   => '',
-                    'libraries' => '',
-                    'users'     => '',
-                    'mediaApps' => '',
+                    'libraries'       => '',
+                    'users'           => '',
+                    'mediaApps'       => '',
+                    'mediaApp'        => '',
+                    'sourceApp'       => '',
+                    'destinationApps' => [],
                 ];
             case 'backup':
                 return [
@@ -88,26 +94,38 @@ trait NotificationTemplates
             'linked'     => 'Linked',
             'removed'    => 'Removed',
             'libraries'  => 'Libraries',
-            'users'      => 'Users',
-            'mediaApps'  => 'Media apps',
-            'media'      => 'Media',
-            'scan'       => 'Scan',
-            'size'       => 'Size',
-            'movies'     => 'Movies',
-            'series'     => 'Series',
-            'episodes'   => 'Episodes',
-            'finished'   => 'Finished',
-            'inProgress' => 'In progress',
-            'started'    => 'Started',
+            'users'         => 'Users',
+            'mediaApps'     => 'Media apps',
+            'mediaApp'      => 'Media app',
+            'media'         => 'Media',
+            'scan'          => 'Scan',
+            'sourceApp'        => 'Source app',
+            'sourcePayload'    => 'Source payload',
+            'destinationApps'  => 'Destination apps',
+            'size'          => 'Size',
+            'movies'        => 'Movies',
+            'series'        => 'Series',
+            'episodes'      => 'Episodes',
+            'finished'      => 'Finished',
+            'inProgress'    => 'In progress',
+            'started'       => 'Started',
         ];
         $lines  = [];
         foreach ($labels as $field => $label) {
             if (!array_key_exists($field, $payload) || $payload[$field] == '' || $payload[$field] == null) {
                 continue;
             }
-            if ($field == 'mediaApps' && is_array($payload[$field])) {
-                $lines[] = $label . ':';
-                $lines   = array_merge($lines, $this->buildNestedNotificationLines($payload[$field], $labels, 0));
+            if (($field == 'mediaApps' || $field == 'mediaApp') && is_array($payload[$field])) {
+                $keys   = array_keys($payload[$field]);
+                $isList = $payload[$field] && $keys == range(0, count($payload[$field]) - 1);
+                if (!$isList) {
+                    $lines[] = $label . ':';
+                    $lines   = array_merge($lines, $this->buildNestedNotificationLines($payload[$field], $labels, 0));
+                    continue;
+                }
+            }
+            if ($field == 'destinationApps' && is_array($payload[$field])) {
+                $lines[] = $label . ': ' . implode(', ', $payload[$field]);
                 continue;
             }
             if (is_array($payload[$field]) || is_object($payload[$field])) {

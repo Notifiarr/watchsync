@@ -223,13 +223,56 @@ trait Notify
         }
 
         if ($trigger == 'syncWebhook') {
-            $payload['mediaApps'] = $apps ? implode(', ', $apps) : translate('allMediaApps');
+            $namedApp  = '';
+            $sourceApp = '';
+            if (!empty($job['media_app_id'])) {
+                $row = $this->database->getMediaApp($job['media_app_id']);
+                if ($row) {
+                    $namedApp  = trim(strval($row['name'] ?? ''));
+                    $sourceApp = $this->webhookSourceApp($row['platform'] ?? 0);
+                }
+            }
+            if ($namedApp == '' && $apps) {
+                $namedApp = implode(', ', $apps);
+            }
+            $payload['mediaApp'] = $namedApp;
+            if ($sourceApp != '') {
+                $payload['sourceApp'] = $sourceApp;
+            }
+            $incoming = $job['webhook_payload'] ?? [];
+            if (!is_array($incoming)) {
+                $incoming = [];
+            }
+            $payload['sourcePayload'] = $incoming;
+            if (intval($job['sync_type'] ?? 0) == MediaSyncTypes::HISTORY) {
+                $payload['destinationApps'] = $this->notificationAppNames($job['destination_apps'] ?? []);
+            }
+            if (intval($job['sync_type'] ?? 0) == MediaSyncTypes::LIBRARY) {
+                if ($payload['sourceApp'] == '') {
+                    $sourceApp = $this->librarySourceApp($job);
+                    if ($sourceApp != '') {
+                        $payload['sourceApp'] = $sourceApp;
+                    }
+                }
+                $payload['destinationApps'] = $this->libraryDestinationApps($job);
+            }
         } else {
             if (isset($this->currentJob['stats']['_historySeen'])) {
                 unset($this->currentJob['stats']['_historySeen']);
                 $stats = $this->currentJob['stats'];
             }
             $payload['mediaApps'] = $this->syncEndMediaApps($stats, $apps);
+            if ($syncType == MediaSyncTypes::LIBRARY) {
+                if (array_key_exists('mediaApps', $payload)) {
+                    $payload['mediaApp'] = $payload['mediaApps'];
+                    unset($payload['mediaApps']);
+                }
+                $sourceApp = $this->librarySourceApp($job);
+                if ($sourceApp != '') {
+                    $payload['sourceApp'] = $sourceApp;
+                }
+                $payload['destinationApps'] = $this->libraryDestinationApps($job);
+            }
         }
 
         $libraryTotals = is_array($stats['library'] ?? null) ? $stats['library'] : [];
@@ -252,6 +295,85 @@ trait Notify
             return;
         }
         logger($log, 'notification ' . $trigger . ' sent');
+    }
+
+    public function webhookSourceApp($platform)
+    {
+        switch (intval($platform)) {
+            case MediaPlatforms::PLEX:
+                return 'plex';
+            case MediaPlatforms::EMBY:
+                return 'emby';
+            case MediaPlatforms::JELLYFIN:
+                return 'jellyfin';
+            default:
+                return '';
+        }
+    }
+
+    public function notificationAppNames($apps)
+    {
+        if (!is_array($apps)) {
+            return [];
+        }
+
+        $names = [];
+        foreach ($apps as $name) {
+            $name = trim(strval($name));
+            if ($name != '' && !in_array($name, $names)) {
+                $names[] = $name;
+            }
+        }
+
+        return $names;
+    }
+
+    public function librarySourceApp($job)
+    {
+        $row   = [];
+        $appId = intval($job['media_app_id'] ?? 0);
+        if ($appId) {
+            $row = $this->database->getMediaApp($appId) ?: [];
+        }
+        if (!$row) {
+            foreach ($this->database->getMediaApps() as $mediaApp) {
+                if (!empty($mediaApp['active']) && intval($mediaApp['role'] ?? 0) == MediaAppRoles::MASTER) {
+                    $row = $mediaApp;
+                    break;
+                }
+            }
+        }
+
+        return $row ? $this->webhookSourceApp($row['platform'] ?? 0) : '';
+    }
+
+    public function libraryDestinationApps($job)
+    {
+        $sourceId = intval($job['media_app_id'] ?? 0);
+        if (!$sourceId) {
+            foreach ($this->database->getMediaApps() as $mediaApp) {
+                if (!empty($mediaApp['active']) && intval($mediaApp['role'] ?? 0) == MediaAppRoles::MASTER) {
+                    $sourceId = intval($mediaApp['id']);
+                    break;
+                }
+            }
+        }
+
+        $destinations = [];
+        foreach ($this->database->getMediaApps() as $mediaApp) {
+            if (empty($mediaApp['active']) || intval($mediaApp['id'] ?? 0) == $sourceId) {
+                continue;
+            }
+            if ($sourceId && intval($mediaApp['role'] ?? 0) == MediaAppRoles::MASTER) {
+                continue;
+            }
+            $slug = $this->webhookSourceApp($mediaApp['platform'] ?? 0);
+            if ($slug != '' && !in_array($slug, $destinations)) {
+                $destinations[] = $slug;
+            }
+        }
+
+        return $destinations;
     }
 
     public function syncEndMediaApps($stats, $appNames = [])

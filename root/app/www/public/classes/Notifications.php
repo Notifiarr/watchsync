@@ -43,7 +43,14 @@ class Notifications
             $triggerFields             = $this->getTemplate($trigger);
 
             foreach ($payload as $payloadField => $payloadVal) {
-                if (!array_key_exists($payloadField, $triggerFields) || $payloadVal == '' || $payloadVal == null) {
+                if (!array_key_exists($payloadField, $triggerFields)) {
+                    unset($payload[$payloadField]);
+                    continue;
+                }
+                if (is_array($payloadVal)) {
+                    continue;
+                }
+                if ($payloadVal == '' || $payloadVal == null) {
                     unset($payload[$payloadField]);
                 }
             }

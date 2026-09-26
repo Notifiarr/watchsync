@@ -36,8 +36,11 @@ trait NotificationTests
                 'trigger'   => 'Manual',
                 'mode'      => 'Push and pull',
                 'libraries' => 'Movies, TV',
-                'users'     => 'admin, alice',
-                'mediaApps' => 'Plex, Emby',
+                'users'         => 'admin, alice',
+                'mediaApp'         => 'Living Room',
+                'sourceApp'        => 'plex',
+                'sourcePayload'    => [],
+                'destinationApps'  => ['Cabin', 'Bedroom'],
             ],
             'syncWebhookLibrary' => [
                 'event'     => 'syncWebhook',
@@ -46,9 +49,12 @@ trait NotificationTests
                 'trigger'   => 'Manual',
                 'mode'      => 'Pull only',
                 'libraries' => 'Movies, TV',
-                'users'     => '',
-                'mediaApps' => 'Plex, Emby',
-                'scan'      => 'Since last scan',
+                'users'         => '',
+                'mediaApp'      => 'Living Room',
+                'sourceApp'        => 'plex',
+                'sourcePayload'    => [],
+                'destinationApps'  => ['emby', 'jellyfin'],
+                'scan'             => 'Since last scan',
             ],
             'backup'             => [
                 'event'   => 'backup',
@@ -154,7 +160,7 @@ trait NotificationTests
                     'series'   => 14,
                     'episodes' => 96,
                 ],
-                'mediaApps' => [
+                'mediaApp' => [
                     'Plex' => [
                         'media' => [
                             'movies'   => [
@@ -187,6 +193,8 @@ trait NotificationTests
                         ],
                     ],
                 ],
+                'sourceApp'       => 'plex',
+                'destinationApps' => ['emby'],
             ],
             'syncOverviewParity'          => [
                 'event'     => 'syncOverview',
