@@ -125,6 +125,32 @@ function toggleMediaApp(id)
     });
 }
 // ---------------------------------------------------------------------------------------------
+function openMediaAppDiff(id)
+{
+    pageLoadingStart();
+    $.ajax({
+        url: BASE_URL + 'ajax/mediaApps.php',
+        type: 'post',
+        data: '&event=sourceDiff&id=' + encodeURIComponent(id),
+        success: function (response) {
+            dialogOpen({
+                id: 'media-app-diff',
+                title: translate('info'),
+                body: response,
+                footer: false,
+                size: 'xl',
+                onOpen: function () {
+                    pageLoadingStop();
+                }
+            });
+        },
+        error: function () {
+            pageLoadingStop();
+            toast(translate('mediaApps'), translate('unableToLoadPage'), 'error');
+        }
+    });
+}
+// ---------------------------------------------------------------------------------------------
 function openMediaAppUsers(id)
 {
     pageLoadingStart();

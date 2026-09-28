@@ -67,7 +67,7 @@ foreach ($cron->jobs() as $job) {
             ['key' => 'movies', 'count' => intval($libraryCounts['movies']), 'onclick' => "openLibraryType('movie')"],
             ['key' => 'series', 'count' => intval($libraryCounts['series']), 'onclick' => "openLibraryType('series')"],
             ['key' => 'episodes', 'count' => intval($libraryCounts['episodes'])],
-            ['key' => 'rootFolders', 'count' => count($libraryRoots), 'onclick' => 'openMediaAppRootFolders(' . intval($mediaApp['id']) . ')'],
+            ['key' => 'rootFolders', 'label' => 'paths', 'count' => count($libraryRoots), 'onclick' => 'openMediaAppRootFolders(' . intval($mediaApp['id']) . ')'],
         ];
         ?>
         <div class="col-sm-4 mb-3">
@@ -100,7 +100,7 @@ foreach ($cron->jobs() as $job) {
                     </div>
                     <div class="mb-2">
                         <?php foreach ($pills as $pill) {
-                            $label     = translate($pill['key']);
+                            $label     = translate($pill['label'] ?? $pill['key']);
                             $pillClass = 'badge rounded-pill text-bg-secondary';
                             $title     = $label;
                             if ($isListener) {
@@ -115,6 +115,9 @@ foreach ($cron->jobs() as $job) {
                             }
                             ?>
                             <span class="<?= $pillClass ?>" <?php if (!empty($pill['onclick'])) { ?> style="cursor: pointer;" onclick="<?= $pill['onclick'] ?>" <?php } ?> title="<?= htmlEscape($title) ?>"><?= htmlEscape($label) ?>: <?= intval($pill['count']) ?></span>
+                        <?php } ?>
+                        <?php if ($isListener && $masterApp) { ?>
+                            <span class="badge rounded-pill text-bg-warning" style="cursor: pointer;" onclick="openMediaAppDiff(<?= intval($mediaApp['id']) ?>)" title="<?= htmlEscape(translate('diffFromMain', [$mediaApp['name'], $masterApp['name']])) ?>"><i class="fa-solid fa-circle-info"></i></span>
                         <?php } ?>
                     </div>
                     <div class="small mb-3 d-flex align-items-center">

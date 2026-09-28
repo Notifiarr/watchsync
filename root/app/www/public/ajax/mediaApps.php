@@ -323,6 +323,75 @@ switch ($_POST['event'] ?? '') {
         require RELATIVE_PATH . 'pages/mediaApps/rootFolders.php';
         exit;
 
+    case 'sourceDiff':
+        $id       = intval($_POST['id'] ?? 0);
+        $listener = $database->getMediaApp($id);
+        $master   = [];
+        foreach ($database->getMediaApps() as $mediaAppRow) {
+            if (intval($mediaAppRow['role']) == MediaAppRoles::MASTER) {
+                $master = $mediaAppRow;
+                break;
+            }
+        }
+        if (!$listener || !$master || intval($listener['id']) == intval($master['id'])) {
+            echo '<div class="alert alert-danger mb-0" role="alert">' . htmlEscape(translate('mediaAppNotFound')) . '</div>';
+            exit;
+        }
+
+        $nameSet = function ($users) {
+            $names = [];
+            foreach ($users as $user) {
+                $name = trim(strval($user['username'] ?? ''));
+                if ($name == '') {
+                    continue;
+                }
+                $names[strtolower($name)] = $name;
+            }
+
+            return $names;
+        };
+        $splitNames = function ($listenerNames, $masterNames) {
+            $more = [];
+            $less = [];
+            foreach ($listenerNames as $key => $name) {
+                if (!isset($masterNames[$key])) {
+                    $more[] = $name;
+                }
+            }
+            foreach ($masterNames as $key => $name) {
+                if (!isset($listenerNames[$key])) {
+                    $less[] = $name;
+                }
+            }
+            natcasesort($more);
+            natcasesort($less);
+
+            return ['more' => array_values($more), 'less' => array_values($less)];
+        };
+        $folderSet = function ($folders) use ($mediaApps) {
+            $paths = [];
+            foreach ($folders as $folder) {
+                $key = $mediaApps->libraryPathKey($folder);
+                if ($key == '') {
+                    continue;
+                }
+                $paths[$key] = $folder;
+            }
+
+            return $paths;
+        };
+
+        $library = $database->mediaLibraryDiff($master['platform'], $listener['platform']);
+        $rows    = [
+            'users'       => $splitNames($nameSet($mediaApps->visibleMediaAppUsers($listener)), $nameSet($mediaApps->visibleMediaAppUsers($master))),
+            'movies'      => $library['movies'],
+            'series'      => $library['series'],
+            'episodes'    => $library['episodes'],
+            'rootFolders' => $splitNames($folderSet($mediaApps->getRootFolders($listener)), $folderSet($mediaApps->getRootFolders($master))),
+        ];
+        require RELATIVE_PATH . 'pages/mediaApps/sourceDiff.php';
+        exit;
+
     default:
         echo json_encode(['error' => true, 'message' => translate('unknownSettingsEvent')]);
         exit;

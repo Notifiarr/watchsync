@@ -1144,6 +1144,81 @@ trait MediaLibrary
         return $counts;
     }
 
+    public function mediaLibraryDiff($masterPlatform, $listenerPlatform)
+    {
+        $groups = [
+            'movies'   => ['more' => [], 'less' => []],
+            'series'   => ['more' => [], 'less' => []],
+            'episodes' => ['more' => [], 'less' => []],
+        ];
+        $masterField   = $this->mediaLibraryRemoteField($masterPlatform);
+        $listenerField = $this->mediaLibraryRemoteField($listenerPlatform);
+        if ($masterField == '' || $listenerField == '' || $masterField == $listenerField) {
+            return $groups;
+        }
+
+        $present = function ($field) {
+            return $field . " != ''";
+        };
+        $absent = function ($field) {
+            return '(' . $field . " IS NULL OR " . $field . " = '')";
+        };
+        $sides = [
+            'more' => $present($listenerField) . ' AND ' . $absent($masterField),
+            'less' => $present($masterField) . ' AND ' . $absent($listenerField),
+        ];
+        foreach (['movies' => MOVIE_TABLE, 'series' => SERIES_TABLE] as $key => $table) {
+            foreach ($sides as $side => $where) {
+                $sql = "SELECT title
+                        FROM " . $table . "
+                        WHERE " . $where . "
+                        ORDER BY title ASC";
+                $res = $this->query($sql);
+                while ($row = $this->fetchAssoc($res)) {
+                    $title = trim(strval($row['title'] ?? ''));
+                    if ($title != '') {
+                        $groups[$key][$side][] = $title;
+                    }
+                }
+            }
+        }
+
+        $episodeSides = [
+            'more' => $present('e.' . $listenerField) . ' AND ' . $absent('e.' . $masterField),
+            'less' => $present('e.' . $masterField) . ' AND ' . $absent('e.' . $listenerField),
+        ];
+        foreach ($episodeSides as $side => $where) {
+            $sql = "SELECT s.title AS series_title, e.season, e.episode, e.title
+                    FROM " . EPISODE_TABLE . " e
+                    LEFT JOIN " . SERIES_TABLE . " s ON s.id = e.series_id
+                    WHERE " . $where . "
+                    ORDER BY s.title ASC, e.season ASC, e.episode ASC, e.title ASC";
+            $res     = $this->query($sql);
+            $grouped = [];
+            $order   = [];
+            while ($row = $this->fetchAssoc($res)) {
+                $seriesTitle = trim(strval($row['series_title'] ?? ''));
+                if ($seriesTitle == '') {
+                    $seriesTitle = trim(strval($row['title'] ?? ''));
+                }
+                $season  = str_pad(strval(intval($row['season'] ?? 0)), 2, '0', STR_PAD_LEFT);
+                $episode = str_pad(strval(intval($row['episode'] ?? 0)), 2, '0', STR_PAD_LEFT);
+                $code    = 'S' . $season . 'E' . $episode;
+                $key     = strtolower($seriesTitle);
+                if (!isset($grouped[$key])) {
+                    $grouped[$key] = ['series' => $seriesTitle, 'codes' => []];
+                    $order[]       = $key;
+                }
+                $grouped[$key]['codes'][] = $code;
+            }
+            foreach ($order as $key) {
+                $groups['episodes'][$side][] = $grouped[$key];
+            }
+        }
+
+        return $groups;
+    }
+
     public function hasMediaLibraryData()
     {
         foreach ([MOVIE_TABLE, EPISODE_TABLE] as $table) {
