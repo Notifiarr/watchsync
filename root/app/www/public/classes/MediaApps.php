@@ -68,11 +68,7 @@ class MediaApps
 
     public function visibleMediaAppUsers($mediaApp)
     {
-        $users = $this->database->getMediaAppUsers($mediaApp['id'] ?? 0);
-        if (intval($mediaApp['platform'] ?? 0) != MediaPlatforms::PLEX) {
-            return $users;
-        }
-
+        $users   = $this->database->getMediaAppUsers($mediaApp['id'] ?? 0);
         $visible = [];
         foreach ($users as $user) {
             if ($this->userIsDeleted($user)) {
@@ -100,48 +96,71 @@ class MediaApps
 
     public function purgeDeletedUsers()
     {
-        $idents  = [];
-        $checked = false;
-        $ids     = [];
-        $names   = [];
+        $removed      = [];
+        $removedIds   = [];
+        $removedByApp = [];
+        $usersByApp   = [];
+        $checked      = false;
         foreach ($this->database->getMediaApps() as $mediaApp) {
-            if (!$mediaApp['active'] || intval($mediaApp['platform'] ?? 0) != MediaPlatforms::PLEX || !$this->isOnline($mediaApp)) {
+            if (!$mediaApp['active'] || !$this->isOnline($mediaApp)) {
                 continue;
             }
-            $this->plexDeletedChecked = false;
-            $deleted                  = $this->plexDeletedIdents($mediaApp['url'] ?? '', $mediaApp['token'] ?? '', $mediaApp['server_id'] ?? '');
-            foreach ($deleted as $ident => $yes) {
-                $idents[$ident] = true;
+
+            $before = [];
+            foreach ($this->database->getMediaAppUsers($mediaApp['id']) as $user) {
+                $before[intval($user['id'])] = $user;
             }
-            if (!$this->plexDeletedChecked) {
+
+            $result = $this->refreshUsers($mediaApp['id']);
+            if (!empty($result['error'])) {
                 continue;
             }
             $checked = true;
-            foreach ($this->database->getMediaAppUsers($mediaApp['id']) as $user) {
-                $matched = false;
-                foreach ([strval($user['username'] ?? ''), strval($user['email'] ?? ''), strval($user['remote_id'] ?? '')] as $ident) {
-                    $ident = strtolower(trim($ident));
-                    if ($ident != '' && $ident != '0' && !empty($deleted[$ident])) {
-                        $matched = true;
-                        break;
-                    }
-                }
-                if (!$matched) {
+
+            $kept    = [];
+            $keptIds = [];
+            foreach ($result['users'] ?? [] as $user) {
+                if ($this->userIsDeleted($user)) {
                     continue;
                 }
-                $ids[]   = intval($user['id']);
-                $names[] = strval($user['username'] ?? '');
+                $id = intval($user['id'] ?? 0);
+                if (!$id) {
+                    continue;
+                }
+                $keptIds[$id] = true;
+                $kept[]       = $user;
             }
+
+            $appIds     = [];
+            $appRemoved = [];
+            foreach ($before as $id => $user) {
+                if (!empty($keptIds[$id])) {
+                    continue;
+                }
+                $appIds[]     = $id;
+                $removedIds[] = $id;
+                $name         = strval($user['username'] ?? '');
+                if ($name != '') {
+                    $appRemoved[] = $name;
+                    $removed[]    = $name;
+                }
+            }
+            if ($appIds) {
+                $this->database->deleteMediaAppUsersByIds($appIds);
+            }
+
+            $appId                = intval($mediaApp['id']);
+            $usersByApp[$appId]   = $kept;
+            $removedByApp[$appId] = $appRemoved;
         }
         if (!$checked) {
-            return ['checked' => false, 'removed' => []];
+            return ['checked' => false, 'removed' => [], 'users' => [], 'removedByApp' => []];
         }
-        if ($ids) {
-            $this->database->deleteMediaAppUsersByIds($ids);
+        if ($removedIds) {
             foreach (['parityUserSync'] as $setting) {
                 $state   = $this->database->getJsonSetting($setting);
                 $changed = false;
-                foreach ($ids as $id) {
+                foreach ($removedIds as $id) {
                     $key = strval($id);
                     if (isset($state[$key])) {
                         unset($state[$key]);
@@ -152,12 +171,16 @@ class MediaApps
                     $this->database->setJsonSetting($setting, $state);
                 }
             }
-            logger(CRON_HOUSEKEEPER_LOG, 'deleted ' . count($names) . ' users: ' . implode(', ', $names));
+            logger(CRON_HOUSEKEEPER_LOG, 'deleted ' . count($removed) . ' users: ' . implode(', ', $removed));
             loggerFlush(CRON_HOUSEKEEPER_LOG);
         }
-        $this->deletedUserCache = $idents;
 
-        return ['checked' => true, 'removed' => $names];
+        return [
+            'checked'      => true,
+            'removed'      => $removed,
+            'users'        => $usersByApp,
+            'removedByApp' => $removedByApp,
+        ];
     }
 
     public function getPlatformName($platform)
@@ -1437,12 +1460,18 @@ class MediaApps
 
         if (intval($mediaApp['platform']) == MediaPlatforms::PLEX) {
             $result['users'] = $this->withoutDeletedPlexUsers($url, $mediaApp['token'], $mediaApp['server_id'], $result['users'] ?? []);
+        } else {
+            $kept = [];
+            foreach ($result['users'] ?? [] as $user) {
+                if ($this->userIsDeleted($user)) {
+                    continue;
+                }
+                $kept[] = $user;
+            }
+            $result['users'] = $kept;
         }
 
         $this->database->replaceMediaAppUsers($id, $result['users']);
-        if (intval($mediaApp['platform']) == MediaPlatforms::PLEX) {
-            $this->purgeDeletedUsers();
-        }
         $users = $this->database->getMediaAppUsers($id);
         if (intval($mediaApp['platform']) == MediaPlatforms::PLEX) {
             $users = $this->applyPlexPinRequired($users, $result['users']);

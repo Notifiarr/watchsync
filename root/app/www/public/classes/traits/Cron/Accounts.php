@@ -113,12 +113,20 @@ trait Accounts
             return;
         }
 
-        $mediaApps->refreshUsers($master['id']);
+        $purged       = $mediaApps->purgeDeletedUsers();
+        $purgedUsers  = $purged['users'] ?? [];
+        $removedByApp = $purged['removedByApp'] ?? [];
+        $masterId     = intval($master['id']);
+        if (array_key_exists($masterId, $purgedUsers)) {
+            $masterUsers = $purgedUsers[$masterId];
+        } else {
+            $masterUsers = $this->database->getMediaAppUsers($masterId);
+        }
         if ($this->isAutomaticJob() && $this->database->settingEnabled('syncParityAutoUsers')) {
             $state = $mediaApps->paritySyncState('user');
             if ($state) {
                 $changed = false;
-                foreach ($this->database->getMediaAppUsers($master['id']) as $user) {
+                foreach ($masterUsers as $user) {
                     $id = intval($user['id'] ?? 0);
                     if (!$id || $mediaApps->userIsDeleted($user)) {
                         continue;
@@ -165,14 +173,18 @@ trait Accounts
             $keep[strtolower(trim($user['username']))] = $user;
         }
 
-        logger($this->logfile, 'user sync master ' . $master['name'] . ' users=' . count($keep));
+        $masterRemoved = $removedByApp[$masterId] ?? [];
+        foreach ($masterRemoved as $name) {
+            $this->addParityResult($master, 'users', 'removed', $name);
+        }
+        logger($this->logfile, 'user sync master ' . $master['name'] . ' users=' . count($keep) . ' removed=' . count($masterRemoved));
 
         $automatic = $this->isAutomaticJob();
 
         foreach ($listeners as $listener) {
             $this->stopIfCancelled();
             logger($this->logfile, 'user sync ' . $listener['name']);
-            $mediaApps->refreshUsers($listener['id']);
+            $listenerId   = intval($listener['id']);
             $linkedBefore = [];
             foreach ($keep as $username => $masterUser) {
                 if ($this->database->getMediaAppUserLinkForApp($masterUser['id'], $listener['id'])) {
@@ -180,15 +192,21 @@ trait Accounts
                 }
             }
             $mediaApps->linkUsers();
+            if (array_key_exists($listenerId, $purgedUsers)) {
+                $listenerUsers = $purgedUsers[$listenerId];
+            } else {
+                $listenerUsers = $this->database->getMediaAppUsers($listenerId);
+            }
             $existing = [];
-            foreach ($this->database->getMediaAppUsers($listener['id']) as $user) {
+            foreach ($listenerUsers as $user) {
                 $existing[strtolower(trim($user['username']))] = $user;
             }
 
             $created       = 0;
             $linked        = 0;
             $unchanged     = 0;
-            $removed       = 0;
+            $removedNames  = $removedByApp[$listenerId] ?? [];
+            $removed       = count($removedNames);
             $skipped       = 0;
             $passwords     = 0;
             $accessUsers   = [];
@@ -303,6 +321,9 @@ trait Accounts
             }
             foreach ($passwordNames as $name) {
                 $this->addParityResult($listener, 'users', 'password', $name);
+            }
+            foreach ($removedNames as $name) {
+                $this->addParityResult($listener, 'users', 'removed', $name);
             }
             logger($this->logfile, 'user sync ' . $listener['name'] . ' added=' . $created . ' removed=' . $removed . ' linked=' . $linked . ' unchanged=' . $unchanged . ' skipped=' . $skipped . ' passwords=' . $passwords . ' access=' . intval($access['updated'] ?? 0));
         }
