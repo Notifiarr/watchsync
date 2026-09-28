@@ -121,9 +121,9 @@ $browseSummary         = $database->browseTablesSummary();
                                     ?>
                                 </div>
                                 <h2 class="h5 mt-4 mb-3"><?= htmlEscape(translate('query')) ?></h2>
-                                <div class="input-group mb-3">
-                                    <input type="text" class="form-control font-monospace" id="browseDatabaseQuery" placeholder="<?= htmlEscape(translate('browseDatabaseQueryPlaceholder')) ?>" onkeydown="if (event.key == 'Enter') { runDatabaseQuery(); }">
-                                    <button type="button" class="btn btn-primary" onclick="runDatabaseQuery();"><?= htmlEscape(translate('run')) ?></button>
+                                <div class="mb-3">
+                                    <textarea class="form-control font-monospace" id="browseDatabaseQuery" rows="5" placeholder="<?= htmlEscape(translate('browseDatabaseQueryPlaceholder')) ?>"></textarea>
+                                    <button type="button" class="btn btn-primary mt-2" onclick="runDatabaseQuery();"><?= htmlEscape(translate('run')) ?></button>
                                 </div>
                                 <div id="browseDatabaseQueryResult"></div>
                             </div>
@@ -238,6 +238,9 @@ $browseSummary         = $database->browseTablesSummary();
                                 <button class="nav-link active" id="settings-purge-library-tab" data-bs-toggle="tab" data-bs-target="#settings-purge-library" type="button" role="tab"><?= htmlEscape(translate('library')) ?></button>
                             </li>
                             <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="settings-purge-posters-tab" data-bs-toggle="tab" data-bs-target="#settings-purge-posters" type="button" role="tab"><?= htmlEscape(translate('posterCache')) ?></button>
+                            </li>
+                            <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="settings-purge-history-tab" data-bs-toggle="tab" data-bs-target="#settings-purge-history" type="button" role="tab"><?= htmlEscape(translate('history')) ?></button>
                             </li>
                         </ul>
@@ -248,6 +251,13 @@ $browseSummary         = $database->browseTablesSummary();
                                     <?php require RELATIVE_PATH . 'pages/settings/resetLibrary.php'; ?>
                                 </div>
                                 <button type="button" class="btn btn-outline-danger mt-3" onclick="deleteLocalLibraries();"><?= htmlEscape(translate('deleteLocalLibraries')) ?></button>
+                            </div>
+                            <div class="tab-pane fade" id="settings-purge-posters" role="tabpanel">
+                                <p class="text-body-secondary"><?= htmlEscape(translate('purgePosterCacheDescription')) ?></p>
+                                <div id="purgePosterList">
+                                    <?php require RELATIVE_PATH . 'pages/settings/purgePosters.php'; ?>
+                                </div>
+                                <button type="button" class="btn btn-outline-danger mt-3" onclick="purgePosterCache();"><?= htmlEscape(translate('purgePosterCache')) ?></button>
                             </div>
                             <div class="tab-pane fade" id="settings-purge-history" role="tabpanel">
                                 <p class="text-body-secondary"><?= htmlEscape(translate('resetHistoryDescription')) ?></p>

@@ -1807,6 +1807,19 @@ class MediaApps
         return POSTER_CACHE_PATH . $type . '-' . intval($itemId);
     }
 
+    public function libraryPosterTable($libraryType)
+    {
+        $type = strtolower(trim(strval($libraryType)));
+        if ($type == 'movie' || $type == 'movies') {
+            return MOVIE_TABLE;
+        }
+        if ($type == 'show' || $type == 'shows' || $type == 'series' || $type == 'tv' || $type == 'tvshows') {
+            return SERIES_TABLE;
+        }
+
+        return '';
+    }
+
     public function libraryPosterExists($type, $itemId)
     {
         $file = $this->libraryPosterPath($type, $itemId);

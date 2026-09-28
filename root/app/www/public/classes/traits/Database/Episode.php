@@ -138,7 +138,7 @@ trait Episode
             }
         }
         $fixed = $this->normalizePath($path, 'episode');
-        if ($fixed != '' && ($this->pathLooksMangled($row['path'] ?? '') || trim(strval($row['path'] ?? '')) == '')) {
+        if ($fixed != '' && trim(strval($row['path'] ?? '')) == '') {
             $sets[] = "`path` = '" . $this->prepare($fixed) . "'";
         }
         if ($sets) {

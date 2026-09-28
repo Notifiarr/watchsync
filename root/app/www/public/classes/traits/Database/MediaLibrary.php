@@ -58,37 +58,6 @@ trait MediaLibrary
         return rtrim($path, '/');
     }
 
-    public function pathSlashlessKey($path)
-    {
-        $path = $this->normalizeLibraryPath($path);
-        if ($path == '') {
-            return '';
-        }
-
-        return strtolower(preg_replace('#[/\\\\]+#', '', $path));
-    }
-
-    public function pathLooksMangled($path)
-    {
-        $path = strval($path);
-        if ($path == '') {
-            return false;
-        }
-        if (preg_match('/^[a-zA-Z]:[^\\\\\\/]/', $path)) {
-            return true;
-        }
-
-        $normalized = $this->normalizeLibraryPath($path);
-        if (preg_match('/^[a-zA-Z]:\//', $normalized)) {
-            $rest = substr($normalized, 3);
-            if ($rest != '' && !str_contains($rest, '/')) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     public function normalizePath($path, $type = '')
     {
         $path = $this->normalizeLibraryPath($path);
@@ -153,23 +122,6 @@ trait MediaLibrary
                 FROM " . $table . "
                 WHERE `path` = '" . $this->prepare($path) . "'
                 LIMIT 1";
-        $res  = $this->query($sql);
-        $row  = $this->fetchAssoc($res);
-        if ($row) {
-            return $row;
-        }
-
-        $key = $this->pathSlashlessKey($path);
-        if ($key == '') {
-            return [];
-        }
-        $sql = "SELECT " . $cols . "
-                FROM " . $table . "
-                WHERE LOWER(REPLACE(REPLACE(`path`, '/', ''), '\\\\', '')) = '" . $this->prepare($key) . "'
-                ORDER BY CASE WHEN `path` LIKE '%/%' OR `path` LIKE '%\\\\%' THEN 0 ELSE 1 END,
-                         CASE WHEN `poster` != '' THEN 0 ELSE 1 END,
-                         id ASC
-                LIMIT 1";
         $res = $this->query($sql);
         $row = $this->fetchAssoc($res);
 
@@ -210,18 +162,8 @@ trait MediaLibrary
                 WHERE `path` = '" . $this->prepare($path) . "'
                 LIMIT 1";
         $this->query($sql);
-        $matched = $this->matchedRows();
-        if ($matched > 0) {
-            return $matched;
-        }
 
-        // Same path with different slash style / mangled drive path.
-        $row = $this->getMediaLibraryItemByPath($table, $path);
-        if ($row) {
-            return $this->setMediaLibraryPlatformById($table, $platform, $remoteId, $path, $row['id']);
-        }
-
-        return 0;
+        return $this->matchedRows();
     }
 
     public function setMediaLibraryPlatformById($table, $platform, $remoteId, $path, $id)
@@ -251,7 +193,7 @@ trait MediaLibrary
             $sets .= ", `" . $field . "` = " . $this->sqlStringOrNull($remoteId);
         }
         $currentPath = trim(strval($row['path'] ?? ''));
-        if ($path != '' && ($currentPath == '' || ($this->pathLooksMangled($currentPath) && !$this->pathLooksMangled($path)))) {
+        if ($path != '' && $currentPath == '') {
             $sets .= ", `path` = '" . $this->prepare($path) . "'";
         }
         $sql = "UPDATE " . $table . "
@@ -497,19 +439,6 @@ trait MediaLibrary
             }
         }
 
-        $pathKey = $this->pathSlashlessKey($rawPath != '' ? $rawPath : $path);
-        $rootKey = $this->pathSlashlessKey($root);
-        if ($pathKey == '' || $rootKey == '') {
-            return false;
-        }
-        if ($pathKey == $rootKey) {
-            return true;
-        }
-        $showKey = $this->pathSlashlessKey($this->mediaLibraryShowPath($rawPath != '' ? $rawPath : $path));
-        if ($showKey != '' && $showKey == $rootKey) {
-            return true;
-        }
-
         return false;
     }
 
@@ -522,6 +451,28 @@ trait MediaLibrary
         }
 
         return false;
+    }
+
+    public function mediaIdsUnderRoots($table, $roots)
+    {
+        $where = $this->libraryBrowserPathWhere($roots);
+        if ($where == '') {
+            return [];
+        }
+
+        $ids = [];
+        $sql = "SELECT id
+                FROM " . $table . "
+                WHERE " . $where;
+        $res = $this->query($sql);
+        while ($row = $this->fetchAssoc($res)) {
+            $id = intval($row['id'] ?? 0);
+            if ($id) {
+                $ids[] = $id;
+            }
+        }
+
+        return $ids;
     }
 
     public function deleteMovieById($id)
@@ -537,8 +488,15 @@ trait MediaLibrary
         $sql = "DELETE FROM " . MOVIE_TABLE . "
                 WHERE id = " . $id;
         $this->query($sql);
+        $removed = $this->matchedRows();
+        if ($removed) {
+            $file = POSTER_CACHE_PATH . 'movie-' . $id;
+            if (is_file($file)) {
+                unlink($file);
+            }
+        }
 
-        return $this->matchedRows();
+        return $removed;
     }
 
     public function deleteSeriesById($id)
@@ -568,8 +526,15 @@ trait MediaLibrary
         $sql = "DELETE FROM " . SERIES_TABLE . "
                 WHERE id = " . $id;
         $this->query($sql);
+        $removed = $this->matchedRows();
+        if ($removed) {
+            $file = POSTER_CACHE_PATH . 'series-' . $id;
+            if (is_file($file)) {
+                unlink($file);
+            }
+        }
 
-        return $this->matchedRows();
+        return $removed;
     }
 
     public function deleteEpisodeById($id)
@@ -695,9 +660,9 @@ trait MediaLibrary
             }
         }
         $path = $this->normalizePath($source['path'] ?? '', $table == EPISODE_TABLE ? 'episode' : '');
-        if ($path != '' && !$this->pathLooksMangled($path)) {
+        if ($path != '') {
             $keeperPath = trim(strval($keeper['path'] ?? ''));
-            if ($keeperPath == '' || $this->pathLooksMangled($keeperPath)) {
+            if ($keeperPath == '') {
                 $sets[]         = "`path` = '" . $this->prepare($path) . "'";
                 $keeper['path'] = $path;
             }
@@ -710,332 +675,6 @@ trait MediaLibrary
         }
 
         return $keeperId;
-    }
-
-    public function dedupeLibrary()
-    {
-        $merged = ['movies' => 0, 'series' => 0, 'episodes' => 0];
-        foreach ([MOVIE_TABLE => 'movies', SERIES_TABLE => 'series'] as $table => $bucket) {
-            $merged[$bucket] += $this->mergeSlashlessPathDuplicates($table);
-            $merged[$bucket] += $this->mergeExactTitleDuplicates($table);
-        }
-        $merged['episodes'] += $this->mergeSlashlessEpisodeDuplicates();
-        $merged['episodes'] += $this->mergeMangledEpisodeDuplicates();
-        $merged['episodes'] += $this->mergeEpisodeCodeDuplicates();
-
-        return $merged;
-    }
-
-    public function episodePathQuality($path, $seriesPath = '')
-    {
-        $path = $this->normalizeLibraryPath($path);
-        if ($path == '') {
-            return 0;
-        }
-
-        $score = 1;
-        if ($this->pathLooksMangled($path)) {
-            $score -= 50;
-        }
-        $seriesPath = $this->normalizeLibraryPath($seriesPath);
-        if ($seriesPath != '') {
-            $seriesLower = strtolower($seriesPath);
-            $pathLower   = strtolower($path);
-            if ($pathLower == $seriesLower || str_starts_with($pathLower, $seriesLower . '/')) {
-                $score += 20;
-            }
-        }
-        if (preg_match('#/(plex)/#i', $path)) {
-            $score += 10;
-        }
-        if (preg_match('#^[a-z]:/tv shows/#i', $path)) {
-            $score -= 15;
-        }
-
-        return $score;
-    }
-
-    public function mergeEpisodeCodeDuplicates()
-    {
-        $sql    = "SELECT e.id, e.series_id, e.season, e.episode, e.title, e.path, e.plex, e.emby, e.jellyfin,
-                       e.plex_remote_id, e.emby_remote_id, e.jellyfin_remote_id, e.poster, s.path AS series_path
-                FROM " . EPISODE_TABLE . " e
-                LEFT JOIN " . SERIES_TABLE . " s ON s.id = e.series_id
-                ORDER BY e.series_id ASC, e.season ASC, e.episode ASC, e.id ASC";
-        $res    = $this->query($sql);
-        $groups = [];
-        while ($row = $this->fetchAssoc($res)) {
-            $title = trim(strval($row['title'] ?? ''));
-            if (intval($row['series_id']) <= 0 || $title == '') {
-                continue;
-            }
-            $key = intval($row['series_id']) . ':' . intval($row['season']) . ':' . intval($row['episode']) . ':' . strtolower($title);
-            if (!isset($groups[$key])) {
-                $groups[$key] = [];
-            }
-            $groups[$key][] = $row;
-        }
-
-        $merged = 0;
-        foreach ($groups as $group) {
-            if (count($group) < 2) {
-                continue;
-            }
-            usort($group, function ($a, $b) {
-                $aq = $this->episodePathQuality($a['path'] ?? '', $a['series_path'] ?? '');
-                $bq = $this->episodePathQuality($b['path'] ?? '', $b['series_path'] ?? '');
-                if ($aq != $bq) {
-                    return $bq - $aq;
-                }
-                $ac = intval($a['plex'] ?? 0) + intval($a['emby'] ?? 0) + intval($a['jellyfin'] ?? 0);
-                $bc = intval($b['plex'] ?? 0) + intval($b['emby'] ?? 0) + intval($b['jellyfin'] ?? 0);
-                if ($ac != $bc) {
-                    return $bc - $ac;
-                }
-
-                return intval($a['id']) - intval($b['id']);
-            });
-            $keeper = array_shift($group);
-            foreach ($group as $dup) {
-                $merged += $this->mergeLibraryDuplicateRow(EPISODE_TABLE, $keeper, $dup);
-            }
-        }
-
-        return $merged;
-    }
-
-    public function mergeExactTitleDuplicates($table)
-    {
-        $sql    = "SELECT id, title, year, path, plex, emby, jellyfin, plex_remote_id, emby_remote_id, jellyfin_remote_id, poster
-                FROM " . $table . "
-                ORDER BY id ASC";
-        $res    = $this->query($sql);
-        $groups = [];
-        while ($row = $this->fetchAssoc($res)) {
-            $title = trim(strval($row['title'] ?? ''));
-            if ($title == '') {
-                continue;
-            }
-            $key = strtolower($title) . ':' . intval($row['year'] ?? 0);
-            if (!isset($groups[$key])) {
-                $groups[$key] = [];
-            }
-            $groups[$key][] = $row;
-        }
-
-        $merged = 0;
-        foreach ($groups as $group) {
-            if (count($group) < 2) {
-                continue;
-            }
-            usort($group, function ($a, $b) {
-                $am = $this->pathLooksMangled($a['path'] ?? '') ? 1 : 0;
-                $bm = $this->pathLooksMangled($b['path'] ?? '') ? 1 : 0;
-                if ($am != $bm) {
-                    return $am - $bm;
-                }
-                $ac = intval($a['plex'] ?? 0) + intval($a['emby'] ?? 0) + intval($a['jellyfin'] ?? 0);
-                $bc = intval($b['plex'] ?? 0) + intval($b['emby'] ?? 0) + intval($b['jellyfin'] ?? 0);
-                if ($ac != $bc) {
-                    return $bc - $ac;
-                }
-                $ap = trim(strval($a['poster'] ?? '')) != '' ? 0 : 1;
-                $bp = trim(strval($b['poster'] ?? '')) != '' ? 0 : 1;
-                if ($ap != $bp) {
-                    return $ap - $bp;
-                }
-
-                return intval($a['id']) - intval($b['id']);
-            });
-            $keeper = array_shift($group);
-            foreach ($group as $dup) {
-                $merged += $this->mergeLibraryDuplicateRow($table, $keeper, $dup);
-            }
-        }
-
-        return $merged;
-    }
-
-    public function mergeSlashlessPathDuplicates($table)
-    {
-        if ($table == EPISODE_TABLE) {
-            return $this->mergeSlashlessEpisodeDuplicates();
-        }
-
-        $sql   = "SELECT " . $this->mediaLibrarySelectColumns($table) . "
-                FROM " . $table . "
-                WHERE path != ''
-                ORDER BY id ASC";
-        $res   = $this->query($sql);
-        $byKey = [];
-        while ($row = $this->fetchAssoc($res)) {
-            $key = $this->pathSlashlessKey($row['path'] ?? '');
-            if ($key == '') {
-                continue;
-            }
-            if (!isset($byKey[$key])) {
-                $byKey[$key] = [];
-            }
-            $byKey[$key][] = $row;
-        }
-
-        return $this->mergeLibraryDuplicateGroups($table, $byKey);
-    }
-
-    public function mergeSlashlessEpisodeDuplicates()
-    {
-        $sql   = "SELECT " . $this->mediaLibrarySelectColumns(EPISODE_TABLE) . "
-                FROM " . EPISODE_TABLE . "
-                WHERE path != ''
-                ORDER BY id ASC";
-        $res   = $this->query($sql);
-        $byKey = [];
-        while ($row = $this->fetchAssoc($res)) {
-            $slash = $this->pathSlashlessKey($row['path'] ?? '');
-            if ($slash == '') {
-                continue;
-            }
-            $key = $slash . ':' . intval($row['season']) . ':' . intval($row['episode']);
-            if (!isset($byKey[$key])) {
-                $byKey[$key] = [];
-            }
-            $byKey[$key][] = $row;
-        }
-
-        return $this->mergeLibraryDuplicateGroups(EPISODE_TABLE, $byKey);
-    }
-
-    public function mergeMangledEpisodeDuplicates()
-    {
-        $sql   = "SELECT " . $this->mediaLibrarySelectColumns(EPISODE_TABLE) . "
-                FROM " . EPISODE_TABLE . "
-                WHERE path != ''
-                ORDER BY series_id ASC, season ASC, episode ASC, id ASC";
-        $res   = $this->query($sql);
-        $byKey = [];
-        while ($row = $this->fetchAssoc($res)) {
-            if (intval($row['series_id'] ?? 0) <= 0) {
-                continue;
-            }
-            $key = intval($row['series_id']) . ':' . intval($row['season']) . ':' . intval($row['episode']);
-            if (!isset($byKey[$key])) {
-                $byKey[$key] = [];
-            }
-            $byKey[$key][] = $row;
-        }
-
-        $merged = 0;
-        foreach ($byKey as $group) {
-            if (count($group) < 2) {
-                continue;
-            }
-            $hasMangled = false;
-            foreach ($group as $row) {
-                if ($this->pathLooksMangled($row['path'] ?? '')) {
-                    $hasMangled = true;
-                    break;
-                }
-            }
-            if (!$hasMangled) {
-                continue;
-            }
-            $merged += $this->mergeLibraryDuplicateGroups(EPISODE_TABLE, [$group]);
-        }
-
-        return $merged;
-    }
-
-    public function mergeLibraryDuplicateGroups($table, $byKey)
-    {
-        $merged = 0;
-        foreach ($byKey as $group) {
-            if (!is_array($group) || count($group) < 2) {
-                continue;
-            }
-            usort($group, function ($a, $b) {
-                $am = $this->pathLooksMangled($a['path'] ?? '') ? 1 : 0;
-                $bm = $this->pathLooksMangled($b['path'] ?? '') ? 1 : 0;
-                if ($am != $bm) {
-                    return $am - $bm;
-                }
-                $ac = intval($a['plex'] ?? 0) + intval($a['emby'] ?? 0) + intval($a['jellyfin'] ?? 0);
-                $bc = intval($b['plex'] ?? 0) + intval($b['emby'] ?? 0) + intval($b['jellyfin'] ?? 0);
-                if ($ac != $bc) {
-                    return $bc - $ac;
-                }
-                $ap = trim(strval($a['poster'] ?? '')) != '' ? 0 : 1;
-                $bp = trim(strval($b['poster'] ?? '')) != '' ? 0 : 1;
-                if ($ap != $bp) {
-                    return $ap - $bp;
-                }
-
-                return intval($a['id']) - intval($b['id']);
-            });
-            $keeper = array_shift($group);
-            foreach ($group as $dup) {
-                $merged += $this->mergeLibraryDuplicateRow($table, $keeper, $dup);
-            }
-        }
-
-        return $merged;
-    }
-
-    public function mergeLibraryDuplicateRow($table, $keeper, $dup)
-    {
-        if (!$keeper || !$dup || intval($keeper['id']) == intval($dup['id'])) {
-            return 0;
-        }
-
-        $this->mergeLibraryItemOnto($table, $keeper['id'], $dup);
-        if ($table == SERIES_TABLE) {
-            $sql = "UPDATE " . EPISODE_TABLE . "
-                    SET series_id = " . intval($keeper['id']) . "
-                    WHERE series_id = " . intval($dup['id']);
-            $this->query($sql);
-            $this->deleteSeriesById($dup['id']);
-        } else if ($table == EPISODE_TABLE) {
-            $keepUsers = [];
-            $sql       = "SELECT media_app_user_id
-                    FROM " . USER_EPISODE_LINK_TABLE . "
-                    WHERE episode_id = " . intval($keeper['id']);
-            $res       = $this->query($sql);
-            while ($userRow = $this->fetchAssoc($res)) {
-                $keepUsers[] = intval($userRow['media_app_user_id']);
-            }
-            if ($keepUsers) {
-                $sql = "DELETE FROM " . USER_EPISODE_LINK_TABLE . "
-                        WHERE episode_id = " . intval($dup['id']) . "
-                          AND media_app_user_id IN (" . implode(',', $keepUsers) . ")";
-                $this->query($sql);
-            }
-            $sql = "UPDATE " . USER_EPISODE_LINK_TABLE . "
-                    SET episode_id = " . intval($keeper['id']) . "
-                    WHERE episode_id = " . intval($dup['id']);
-            $this->query($sql);
-            $this->deleteEpisodeById($dup['id']);
-        } else {
-            $keepUsers = [];
-            $sql       = "SELECT media_app_user_id
-                    FROM " . USER_MOVIE_LINK_TABLE . "
-                    WHERE movie_id = " . intval($keeper['id']);
-            $res       = $this->query($sql);
-            while ($userRow = $this->fetchAssoc($res)) {
-                $keepUsers[] = intval($userRow['media_app_user_id']);
-            }
-            if ($keepUsers) {
-                $sql = "DELETE FROM " . USER_MOVIE_LINK_TABLE . "
-                        WHERE movie_id = " . intval($dup['id']) . "
-                          AND media_app_user_id IN (" . implode(',', $keepUsers) . ")";
-                $this->query($sql);
-            }
-            $sql = "UPDATE " . USER_MOVIE_LINK_TABLE . "
-                    SET movie_id = " . intval($keeper['id']) . "
-                    WHERE movie_id = " . intval($dup['id']);
-            $this->query($sql);
-            $this->deleteMovieById($dup['id']);
-        }
-
-        return 1;
     }
 
     public function getMediaLibraryItem($table, $platform, $remoteId, $path)

@@ -8,7 +8,134 @@ var syncLogFindState = {
     timer: null
 };
 var syncLogMatchesLoading = false;
+var syncAutomaticRefreshPending = {};
+var syncAutomaticRefreshTimers = {};
+var syncAutomaticCountdownTimer = null;
+var paritySelected = '';
 
+$(document).on('change', '.sync-library', function () {
+    libraryScanUpdateSelectAll();
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('change', '[id^="syncLibraryAll-"]', function () {
+    $(this).closest('.col').find('.sync-library').prop('checked', $(this).prop('checked'));
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('change', '#syncHistoryUserAll', function () {
+    let checked = $(this).prop('checked');
+    $('.sync-history-user').prop('checked', checked);
+    syncHistoryApplyAppScope();
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('change', '.sync-history-user', function () {
+    syncHistoryApplyUserAppScope($(this).val(), $(this).prop('checked'));
+    syncHistoryUpdateUserSelectAll();
+    syncHistoryUpdateAppSelectAlls();
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('change', '.sync-history-app-all', function () {
+    let appId = String($(this).attr('data-app') || '');
+    let checked = $(this).prop('checked');
+    $('.sync-history-app').filter(function () {
+        return String($(this).attr('data-app') || '') == appId && !$(this).prop('disabled');
+    }).prop('checked', checked);
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('change', '.sync-history-app', function () {
+    syncHistoryUpdateAppSelectAlls();
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click', '.parity-unlink', function (event) {
+    event.stopPropagation();
+    let $icon = $(this);
+    let $item = $icon.closest('.parity-item');
+    parityUnlink($item.attr('data-type'), $icon.attr('data-app'), $icon.attr('data-id'), 0);
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click', '.parity-item', function (event) {
+    if ($(event.target).closest('.form-check').length || $(event.target).closest('.parity-unlink').length) {
+        return;
+    }
+    if ($(this).attr('data-offline') == '1' || $(this).hasClass('parity-item-empty')) {
+        return;
+    }
+    paritySelect(this);
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('change', '.sync-user, .sync-parity-library', function () {
+    parityMirrorChecks($(this).closest('.parity-item'));
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('change', '.parity-select-all', function () {
+    let type = $(this).attr('data-type');
+    let app = $(this).attr('data-app');
+    let cls = parityItemClass(type);
+    let checked = $(this).prop('checked');
+    $('.parity-item[data-type="' + type + '"][data-app="' + app + '"]').find(cls).each(function () {
+        $(this).prop('checked', checked);
+        parityMirrorChecks($(this).closest('.parity-item'));
+    });
+    parityUpdateSelectAll(type);
+});
+// ---------------------------------------------------------------------------------------------
+$(document).off('input.syncLogFind keydown.syncLogFind click.syncLogFind');
+// ---------------------------------------------------------------------------------------------
+$(document).on('keydown.syncLogFind', '#sync-log-dialog #syncLogFind', function (event) {
+    if (event.key == 'Enter') {
+        event.preventDefault();
+        submitSyncLogFind();
+    } else if (event.key == 'Escape') {
+        $(this).val('');
+        resetSyncLogFind();
+    }
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click.syncLogFind', '#sync-log-dialog #syncLogFindSearch', function (event) {
+    event.preventDefault();
+    submitSyncLogFind();
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click.syncLogFind', '#sync-log-dialog #syncLogFindClear', function (event) {
+    event.preventDefault();
+    $('#sync-log-dialog #syncLogFind').val('').trigger('focus');
+    resetSyncLogFind();
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('keydown.syncLogFind', function (event) {
+    if (!$('#sync-log-dialog').hasClass('show')) {
+        return;
+    }
+    if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() == 'f') {
+        event.preventDefault();
+        $('#sync-log-dialog #syncLogFind').trigger('focus').trigger('select');
+    }
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click', '.sync-history-toggle', function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    toggleSyncHistoryList(this);
+    return false;
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click', '.sync-job-row', function (event) {
+    if ($(this).attr('data-status') == 'queued') {
+        return;
+    }
+    if ($(event.target).closest('.sync-history-toggle, .sync-history-list').length) {
+        return;
+    }
+    openSyncLog($(this).attr('data-id'));
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('page:loaded', function (event, pageKey) {
+    closeSyncLogSource();
+    if (pageKey == 'sync') {
+        initSyncHistoryTable();
+    }
+});
+// ---------------------------------------------------------------------------------------------
 function closeSyncLogSource()
 {
     stopSSEPoll();
@@ -93,8 +220,6 @@ function formatSyncCountdown(seconds)
     return parts.join(' ');
 }
 // ---------------------------------------------------------------------------------------------
-var syncAutomaticRefreshPending = {};
-var syncAutomaticRefreshTimers = {};
 function refreshSyncAutomaticCountdown($el)
 {
     let key = $el.attr('data-key') || '';
@@ -168,7 +293,6 @@ function updateSyncAutomaticCountdowns()
     });
 }
 // ---------------------------------------------------------------------------------------------
-var syncAutomaticCountdownTimer = null;
 function initSyncAutomaticCountdowns()
 {
     updateSyncAutomaticCountdowns();
@@ -464,38 +588,6 @@ function saveLibraryScan()
     });
 }
 // ---------------------------------------------------------------------------------------------
-$(document).on('change', '.sync-library', function () {
-    libraryScanUpdateSelectAll();
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('change', '[id^="syncLibraryAll-"]', function () {
-    $(this).closest('.col').find('.sync-library').prop('checked', $(this).prop('checked'));
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('change', '#syncHistoryUserAll', function () {
-    let checked = $(this).prop('checked');
-    $('.sync-history-user').prop('checked', checked);
-    syncHistoryApplyAppScope();
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('change', '.sync-history-user', function () {
-    syncHistoryApplyUserAppScope($(this).val(), $(this).prop('checked'));
-    syncHistoryUpdateUserSelectAll();
-    syncHistoryUpdateAppSelectAlls();
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('change', '.sync-history-app-all', function () {
-    let appId = String($(this).attr('data-app') || '');
-    let checked = $(this).prop('checked');
-    $('.sync-history-app').filter(function () {
-        return String($(this).attr('data-app') || '') == appId && !$(this).prop('disabled');
-    }).prop('checked', checked);
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('change', '.sync-history-app', function () {
-    syncHistoryUpdateAppSelectAlls();
-});
-// ---------------------------------------------------------------------------------------------
 function startLibrarySync()
 {
     let libraries = [];
@@ -557,7 +649,6 @@ function startHistorySync(dryRun)
         }
     });
 }
-var paritySelected = '';
 // ---------------------------------------------------------------------------------------------
 function parityClearSelect()
 {
@@ -856,39 +947,6 @@ function parityUnlink(type, appId, id, isMaster)
         }
     });
 }
-// ---------------------------------------------------------------------------------------------
-$(document).on('click', '.parity-unlink', function (event) {
-    event.stopPropagation();
-    let $icon = $(this);
-    let $item = $icon.closest('.parity-item');
-    parityUnlink($item.attr('data-type'), $icon.attr('data-app'), $icon.attr('data-id'), 0);
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('click', '.parity-item', function (event) {
-    if ($(event.target).closest('.form-check').length || $(event.target).closest('.parity-unlink').length) {
-        return;
-    }
-    if ($(this).attr('data-offline') == '1' || $(this).hasClass('parity-item-empty')) {
-        return;
-    }
-    paritySelect(this);
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('change', '.sync-user, .sync-parity-library', function () {
-    parityMirrorChecks($(this).closest('.parity-item'));
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('change', '.parity-select-all', function () {
-    let type = $(this).attr('data-type');
-    let app = $(this).attr('data-app');
-    let cls = parityItemClass(type);
-    let checked = $(this).prop('checked');
-    $('.parity-item[data-type="' + type + '"][data-app="' + app + '"]').find(cls).each(function () {
-        $(this).prop('checked', checked);
-        parityMirrorChecks($(this).closest('.parity-item'));
-    });
-    parityUpdateSelectAll(type);
-});
 // ---------------------------------------------------------------------------------------------
 function startParityLibrariesSync()
 {
@@ -1367,39 +1425,6 @@ function submitSyncLogFind()
     runSyncLogFind(query);
 }
 // ---------------------------------------------------------------------------------------------
-$(document).off('input.syncLogFind keydown.syncLogFind click.syncLogFind');
-// ---------------------------------------------------------------------------------------------
-$(document).on('keydown.syncLogFind', '#sync-log-dialog #syncLogFind', function (event) {
-    if (event.key == 'Enter') {
-        event.preventDefault();
-        submitSyncLogFind();
-    } else if (event.key == 'Escape') {
-        $(this).val('');
-        resetSyncLogFind();
-    }
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('click.syncLogFind', '#sync-log-dialog #syncLogFindSearch', function (event) {
-    event.preventDefault();
-    submitSyncLogFind();
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('click.syncLogFind', '#sync-log-dialog #syncLogFindClear', function (event) {
-    event.preventDefault();
-    $('#sync-log-dialog #syncLogFind').val('').trigger('focus');
-    resetSyncLogFind();
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('keydown.syncLogFind', function (event) {
-    if (!$('#sync-log-dialog').hasClass('show')) {
-        return;
-    }
-    if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() == 'f') {
-        event.preventDefault();
-        $('#sync-log-dialog #syncLogFind').trigger('focus').trigger('select');
-    }
-});
-// ---------------------------------------------------------------------------------------------
 function updateSyncLogFindCount(total)
 {
     if (!syncLogFindState.query) {
@@ -1579,27 +1604,3 @@ function toggleSyncHistoryList(el)
     $(el).closest('.sync-history-details').find('.sync-history-list').prop('hidden', !$(el).closest('.sync-history-details').find('.sync-history-list').prop('hidden'));
 }
 // ---------------------------------------------------------------------------------------------
-$(document).on('click', '.sync-history-toggle', function (event) {
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    toggleSyncHistoryList(this);
-    return false;
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('click', '.sync-job-row', function (event) {
-    if ($(this).attr('data-status') == 'queued') {
-        return;
-    }
-    if ($(event.target).closest('.sync-history-toggle, .sync-history-list').length) {
-        return;
-    }
-    openSyncLog($(this).attr('data-id'));
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('page:loaded', function (event, pageKey) {
-    closeSyncLogSource();
-    if (pageKey == 'sync') {
-        initSyncHistoryTable();
-    }
-});

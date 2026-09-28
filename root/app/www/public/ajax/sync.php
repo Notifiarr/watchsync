@@ -349,14 +349,12 @@ switch ($_POST['event'] ?? $_GET['event'] ?? '') {
             exit;
         }
         $pruned  = $mediaApps->setScanLibraries($items);
-        $merged  = $database->dedupeLibrary();
         $removed = intval($pruned['movies'] ?? 0) + intval($pruned['series'] ?? 0) + intval($pruned['episodes'] ?? 0);
-        $dupes   = intval($merged['movies'] ?? 0) + intval($merged['series'] ?? 0) + intval($merged['episodes'] ?? 0);
         $message = translate('saved');
-        if ($removed || $dupes) {
-            $message .= ' (removed ' . $removed . ', merged ' . $dupes . ')';
+        if ($removed) {
+            $message .= ' (removed ' . $removed . ')';
         }
-        echo json_encode(['error' => false, 'message' => $message, 'pruned' => $pruned, 'merged' => $merged]);
+        echo json_encode(['error' => false, 'message' => $message, 'pruned' => $pruned]);
         exit;
 
     case 'saveParitySync':

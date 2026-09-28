@@ -1,4 +1,5 @@
 var BASE_URL = window.APP_BASE || '';
+var lastShiftCheckbox = {};
 
 $(document).ajaxComplete(function (event, xhr) {
     try {
@@ -8,7 +9,7 @@ $(document).ajaxComplete(function (event, xhr) {
         }
     } catch (e) {}
 });
-
+// ---------------------------------------------------------------------------------------------
 $(function () {
     const savedTheme = localStorage.getItem("theme");
     const initialTheme = savedTheme || "dark";
@@ -30,6 +31,36 @@ $(function () {
     if (typeof initializeSSE == 'function') {
         initializeSSE();
     }
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click', '.sync-library, .sync-user, .sync-parity-library, .sync-history-user, .notification-trigger', function (event) {
+    let groups = ['.sync-library', '.sync-user', '.sync-parity-library', '.sync-history-user', '.notification-trigger'];
+    let group  = '';
+    for (let i = 0; i < groups.length; i++) {
+        if ($(this).hasClass(groups[i].substring(1))) {
+            group = groups[i];
+            break;
+        }
+    }
+    if (!group) {
+        return;
+    }
+
+    if (event.shiftKey && lastShiftCheckbox[group]) {
+        let start = $(group).index(lastShiftCheckbox[group]);
+        let end   = $(group).index(this);
+        if (start > -1 && end > -1) {
+            let checked = $(this).prop('checked');
+            $(group).slice(Math.min(start, end), Math.max(start, end) + 1).each(function () {
+                if (this == event.currentTarget) {
+                    return;
+                }
+                $(this).prop('checked', checked).trigger('change');
+            });
+        }
+    }
+
+    lastShiftCheckbox[group] = this;
 });
 // ---------------------------------------------------------------------------------------------
 function toast(title, message, type)
@@ -378,34 +409,4 @@ function dialogClose(elm)
     $('#' + id).click();
     $('#' + id).remove();
 }
-var lastShiftCheckbox = {};
 // ---------------------------------------------------------------------------------------------
-$(document).on('click', '.sync-library, .sync-user, .sync-parity-library, .sync-history-user, .notification-trigger', function (event) {
-    let groups = ['.sync-library', '.sync-user', '.sync-parity-library', '.sync-history-user', '.notification-trigger'];
-    let group  = '';
-    for (let i = 0; i < groups.length; i++) {
-        if ($(this).hasClass(groups[i].substring(1))) {
-            group = groups[i];
-            break;
-        }
-    }
-    if (!group) {
-        return;
-    }
-
-    if (event.shiftKey && lastShiftCheckbox[group]) {
-        let start = $(group).index(lastShiftCheckbox[group]);
-        let end   = $(group).index(this);
-        if (start > -1 && end > -1) {
-            let checked = $(this).prop('checked');
-            $(group).slice(Math.min(start, end), Math.max(start, end) + 1).each(function () {
-                if (this == event.currentTarget) {
-                    return;
-                }
-                $(this).prop('checked', checked).trigger('change');
-            });
-        }
-    }
-
-    lastShiftCheckbox[group] = this;
-});

@@ -11,6 +11,104 @@ var libraryState = {
     observers: []
 };
 
+$(document).on('page:loaded', function (event, pageKey) {
+    if (pageKey != 'library') {
+        libraryState.observers.forEach(function (observer) {
+            observer.disconnect();
+        });
+        libraryState.observers = [];
+        return;
+    }
+    if (window.libraryPendingType) {
+        $('#libraryType').val(window.libraryPendingType);
+        window.libraryPendingType = '';
+    }
+    libraryBindObservers();
+    libraryReload();
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('change', '#libraryType, #libraryLibrary, #libraryUser, #libraryWatched', function () {
+    if ($('#libraryList').length) {
+        libraryReload();
+    }
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click', '.library-az-letter:not(.disabled)', function () {
+    let letter = String($(this).data('letter') || '');
+    libraryState.seq++;
+    libraryState.loading = false;
+    libraryState.letter = letter;
+    $('#libraryAz .library-az-letter').removeClass('active');
+    $(this).addClass('active');
+    libraryResetList();
+    libraryLoadPage('down');
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click', '#libraryStatsTable th.library-stats-sort', function () {
+    let $th = $(this);
+    let $table = $th.closest('table');
+    let $tbody = $table.find('tbody');
+    let col = $th.index();
+    let type = $th.attr('data-sort') || 'text';
+    let dir = $th.hasClass('sort-asc') ? 'desc' : 'asc';
+
+    $table.find('th.library-stats-sort').removeClass('sort-asc sort-desc').attr('aria-sort', 'none');
+    $table.find('th.library-stats-sort .library-stats-sort-icon')
+        .removeClass('fa-sort-up fa-sort-down')
+        .addClass('fa-sort');
+    $th.addClass(dir == 'asc' ? 'sort-asc' : 'sort-desc').attr('aria-sort', dir == 'asc' ? 'ascending' : 'descending');
+    $th.find('.library-stats-sort-icon')
+        .removeClass('fa-sort')
+        .addClass(dir == 'asc' ? 'fa-sort-up' : 'fa-sort-down');
+
+    let rows = $tbody.find('tr').get();
+    rows.sort(function (a, b) {
+        let aVal = $(a).children().eq(col).attr('data-value');
+        let bVal = $(b).children().eq(col).attr('data-value');
+        if (type == 'number') {
+            aVal = parseFloat(aVal) || 0;
+            bVal = parseFloat(bVal) || 0;
+            return dir == 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        aVal = String(aVal || '').toLowerCase();
+        bVal = String(bVal || '').toLowerCase();
+        if (aVal < bVal) {
+            return dir == 'asc' ? -1 : 1;
+        }
+        if (aVal > bVal) {
+            return dir == 'asc' ? 1 : -1;
+        }
+        return 0;
+    });
+    $.each(rows, function (_, row) {
+        $tbody.append(row);
+    });
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click', '.library-card', function (event) {
+    if ($(event.target).closest('.library-card-menu-wrap').length) {
+        return;
+    }
+    openLibraryItem($(this).attr('data-type'), $(this).attr('data-id'), $(this).attr('data-label'));
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click', '.library-card-details', function (event) {
+    event.preventDefault();
+    let card = $(this).closest('.library-card');
+    openLibraryItemDetails(card.attr('data-type'), card.attr('data-id'), card.attr('data-label'));
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click', '.library-card-refresh-poster', function (event) {
+    event.preventDefault();
+    refreshLibraryPoster($(this).closest('.library-card'));
+});
+// ---------------------------------------------------------------------------------------------
+$(document).on('click', '.library-series-cell', function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    openLibrarySeriesWatch($(this));
+});
+// ---------------------------------------------------------------------------------------------
 function libraryFilters()
 {
     return {
@@ -52,7 +150,26 @@ function libraryCardHtml(item)
     banner.append($('<span class="library-type-label"></span>').text(
         type == 'series' ? translate('series') : translate('movie')
     ));
-    banner.append($('<span class="library-type-watchers"></span>').text(String(watchers)));
+    let actions = $('<div class="library-type-actions"></div>');
+    actions.append($('<span class="library-type-watchers"></span>').text(String(watchers)));
+    let menuWrap = $('<div class="library-card-menu-wrap dropdown"></div>');
+    menuWrap.append(
+        $('<button type="button" class="library-card-menu" data-bs-toggle="dropdown" aria-expanded="false"></button>')
+            .attr('data-bs-popper-config', '{"strategy":"fixed"}')
+            .append($('<i class="fa-solid fa-ellipsis"></i>'))
+    );
+    menuWrap.append(
+        $('<ul class="dropdown-menu dropdown-menu-end"></ul>').append(
+            $('<li></li>').append(
+                $('<button type="button" class="dropdown-item library-card-details"></button>').text(translate('details'))
+            ),
+            $('<li></li>').append(
+                $('<button type="button" class="dropdown-item library-card-refresh-poster"></button>').text(translate('refreshPoster'))
+            )
+        )
+    );
+    actions.append(menuWrap);
+    banner.append(actions);
     card.append(banner);
     let poster = $('<div class="library-poster-wrap"></div>');
     if (item.poster) {
@@ -221,6 +338,68 @@ function libraryReload()
     libraryLoadPage('down');
 }
 // ---------------------------------------------------------------------------------------------
+function refreshLibraryPoster(card)
+{
+    if (!confirm(translate('refreshPosterConfirm'))) {
+        return;
+    }
+
+    let type = card.attr('data-type') || '';
+    let id = card.attr('data-id') || '';
+    $.ajax({
+        url: BASE_URL + 'ajax/library.php',
+        type: 'post',
+        dataType: 'json',
+        data: '&event=refreshLibraryPoster&type=' + encodeURIComponent(type) + '&id=' + encodeURIComponent(id),
+        success: function (response) {
+            if (!response || response.error) {
+                toast(translate('library'), (response && response.message) || translate('couldNotRefreshPoster'), 'error');
+                return;
+            }
+            let src = BASE_URL + 'ajax/libraryPoster.php?type=' + encodeURIComponent(type) + '&id=' + encodeURIComponent(id) + '&t=' + Date.now();
+            let img = card.find('.library-poster');
+            if (!img.length) {
+                img = $('<img class="library-poster" alt="">');
+                card.find('.library-poster-placeholder').replaceWith(img);
+            }
+            img.attr('src', src);
+            img.one('error', function () {
+                $(this).replaceWith($('<div class="library-poster-placeholder"></div>'));
+            });
+            toast(translate('library'), response.message || translate('posterRefreshed'), 'success');
+        },
+        error: function () {
+            toast(translate('library'), translate('couldNotRefreshPoster'), 'error');
+        }
+    });
+}
+// ---------------------------------------------------------------------------------------------
+function openLibraryItemDetails(type, id, title)
+{
+    pageLoadingStart();
+    $.ajax({
+        url: BASE_URL + 'ajax/library.php',
+        type: 'post',
+        data: '&event=itemDetails&type=' + encodeURIComponent(type) + '&id=' + encodeURIComponent(id),
+        success: function (response) {
+            dialogOpen({
+                id: 'library-item-details',
+                title: title,
+                body: response,
+                footer: false,
+                size: 'lg',
+                onOpen: function () {
+                    pageLoadingStop();
+                }
+            });
+        },
+        error: function () {
+            pageLoadingStop();
+            toast(translate('library'), translate('unableToLoadPage'), 'error');
+        }
+    });
+}
+// ---------------------------------------------------------------------------------------------
 function openLibraryItem(type, id, title)
 {
     pageLoadingStart();
@@ -252,90 +431,6 @@ function openLibraryType(type)
     window.libraryPendingType = type == 'series' ? 'series' : 'movie';
     loadPage('library');
 }
-// ---------------------------------------------------------------------------------------------
-$(document).on('page:loaded', function (event, pageKey) {
-    if (pageKey != 'library') {
-        libraryState.observers.forEach(function (observer) {
-            observer.disconnect();
-        });
-        libraryState.observers = [];
-        return;
-    }
-    if (window.libraryPendingType) {
-        $('#libraryType').val(window.libraryPendingType);
-        window.libraryPendingType = '';
-    }
-    libraryBindObservers();
-    libraryReload();
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('change', '#libraryType, #libraryLibrary, #libraryUser, #libraryWatched', function () {
-    if ($('#libraryList').length) {
-        libraryReload();
-    }
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('click', '.library-az-letter:not(.disabled)', function () {
-    let letter = String($(this).data('letter') || '');
-    libraryState.seq++;
-    libraryState.loading = false;
-    libraryState.letter = letter;
-    $('#libraryAz .library-az-letter').removeClass('active');
-    $(this).addClass('active');
-    libraryResetList();
-    libraryLoadPage('down');
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('click', '#libraryStatsTable th.library-stats-sort', function () {
-    let $th = $(this);
-    let $table = $th.closest('table');
-    let $tbody = $table.find('tbody');
-    let col = $th.index();
-    let type = $th.attr('data-sort') || 'text';
-    let dir = $th.hasClass('sort-asc') ? 'desc' : 'asc';
-
-    $table.find('th.library-stats-sort').removeClass('sort-asc sort-desc').attr('aria-sort', 'none');
-    $table.find('th.library-stats-sort .library-stats-sort-icon')
-        .removeClass('fa-sort-up fa-sort-down')
-        .addClass('fa-sort');
-    $th.addClass(dir == 'asc' ? 'sort-asc' : 'sort-desc').attr('aria-sort', dir == 'asc' ? 'ascending' : 'descending');
-    $th.find('.library-stats-sort-icon')
-        .removeClass('fa-sort')
-        .addClass(dir == 'asc' ? 'fa-sort-up' : 'fa-sort-down');
-
-    let rows = $tbody.find('tr').get();
-    rows.sort(function (a, b) {
-        let aVal = $(a).children().eq(col).attr('data-value');
-        let bVal = $(b).children().eq(col).attr('data-value');
-        if (type == 'number') {
-            aVal = parseFloat(aVal) || 0;
-            bVal = parseFloat(bVal) || 0;
-            return dir == 'asc' ? aVal - bVal : bVal - aVal;
-        }
-        aVal = String(aVal || '').toLowerCase();
-        bVal = String(bVal || '').toLowerCase();
-        if (aVal < bVal) {
-            return dir == 'asc' ? -1 : 1;
-        }
-        if (aVal > bVal) {
-            return dir == 'asc' ? 1 : -1;
-        }
-        return 0;
-    });
-    $.each(rows, function (_, row) {
-        $tbody.append(row);
-    });
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('click', '.library-card', function () {
-    openLibraryItem($(this).attr('data-type'), $(this).attr('data-id'), $(this).attr('data-label'));
-});
-// ---------------------------------------------------------------------------------------------
-$(document).on('click', '.library-series-cell', function (event) {
-    event.preventDefault();
-    event.stopPropagation();
-    openLibrarySeriesWatch($(this));
-});
 // ---------------------------------------------------------------------------------------------
 function openLibrarySeriesWatch(cell)
 {

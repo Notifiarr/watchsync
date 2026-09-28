@@ -299,6 +299,66 @@ try {
                 'html'  => ob_get_clean(),
             ];
             break;
+        case 'purgePosterCache':
+            $master = $mediaApps->masterMediaApp();
+            $keys   = [];
+            foreach (explode(',', strval($_POST['libraries'] ?? '')) as $key) {
+                $key = trim($key);
+                if ($key != '') {
+                    $keys[$key] = $key;
+                }
+            }
+            if (!$master || !$keys) {
+                $result = [
+                    'error'   => true,
+                    'message' => translate('missingLocalLibraries'),
+                ];
+                break;
+            }
+            $removed = 0;
+            $failed  = 0;
+            foreach ($database->getMediaAppLibraries($master['id']) as $library) {
+                $key = strval($library['key'] ?? '');
+                if ($key == '' || !isset($keys[$key])) {
+                    continue;
+                }
+                $table = $mediaApps->libraryPosterTable($library['type'] ?? '');
+                if ($table == '') {
+                    continue;
+                }
+                $fileType = $table == SERIES_TABLE ? 'series' : 'movie';
+                foreach ($database->mediaIdsUnderRoots($table, $library['paths'] ?? []) as $itemId) {
+                    $file = $mediaApps->libraryPosterPath($fileType, $itemId);
+                    if (!is_file($file)) {
+                        continue;
+                    }
+                    if (unlink($file)) {
+                        $removed++;
+                    } else {
+                        $failed++;
+                    }
+                }
+            }
+            if ($failed && !$removed) {
+                $result = [
+                    'error'   => true,
+                    'message' => translate('couldNotPurgePosterCache'),
+                ];
+                break;
+            }
+            $result = [
+                'error'   => false,
+                'message' => translate('purgePosterCacheComplete', [$removed]),
+            ];
+            break;
+        case 'listPurgePosters':
+            ob_start();
+            require RELATIVE_PATH . 'pages/settings/purgePosters.php';
+            $result = [
+                'error' => false,
+                'html'  => ob_get_clean(),
+            ];
+            break;
         case 'listResetLibraries':
             ob_start();
             require RELATIVE_PATH . 'pages/settings/resetLibrary.php';

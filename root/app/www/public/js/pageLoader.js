@@ -37,3 +37,4 @@ $(function () {
     const initialPage = $('.menu-link.active[data-page]').first().data('page') || 'mediaApps';
     loadPage(initialPage);
 });
+// ---------------------------------------------------------------------------------------------

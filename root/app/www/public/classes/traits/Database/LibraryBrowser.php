@@ -102,10 +102,6 @@ trait LibraryBrowser
             }
             $parts[] = "`path` = '" . $this->prepare($root) . "'";
             $parts[] = "`path` LIKE '" . $this->prepare($root) . "/%'";
-            $key     = $this->pathSlashlessKey($root);
-            if ($key != '') {
-                $parts[] = "LOWER(REPLACE(REPLACE(`path`, '/', ''), '\\\\', '')) LIKE '" . $this->prepare($key) . "%'";
-            }
         }
         if (!$parts) {
             return '';

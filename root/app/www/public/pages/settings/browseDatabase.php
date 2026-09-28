@@ -79,8 +79,11 @@ switch ($browseView) {
         $maxRows  = max(1, intval($browse['maxRows'] ?? 500));
         $affected = array_key_exists('affected', $browse) ? $browse['affected'] : null;
         ?>
-        <div class="mb-2">
-            <code class="small"><?= htmlEscape($sql) ?></code>
+        <div class="mb-2 d-flex align-items-start">
+            <i class="fas fa-pen-to-square me-2" style="cursor: pointer;" title="<?= htmlEscape(translate('edit')) ?>" onclick="$('#browseDatabaseQuery').val($(this).next().text());"></i>
+            <div class="browse-database-query">
+                <code class="small"><?= htmlEscape($sql) ?></code>
+            </div>
         </div>
         <?php if ($capped) { ?>
             <div class="text-body-secondary small mb-2"><?= htmlEscape(translate('browseDatabaseQueryCapped', [$maxRows])) ?></div>

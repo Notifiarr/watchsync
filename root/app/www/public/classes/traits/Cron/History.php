@@ -297,12 +297,7 @@ trait History
         }
 
         $showPath = $this->database->mediaLibraryShowPath($episodePath);
-        if (
-            $showPath != '' && (
-                strcasecmp($showPath, $seriesPath) == 0
-                || $this->database->pathSlashlessKey($showPath) == $this->database->pathSlashlessKey($seriesPath)
-            )
-        ) {
+        if ($showPath != '' && strcasecmp($showPath, $seriesPath) == 0) {
             return false;
         }
 
@@ -523,17 +518,11 @@ trait History
             return '';
         }
 
-        $pathKey = $this->database->pathSlashlessKey($path);
         if ($type == 'movie') {
             $items = $mediaApps->getItems($listenerApp, []);
             foreach ($items['movies'] ?? [] as $live) {
                 $livePath = $this->database->normalizeLibraryPath($live['path'] ?? '');
-                if (
-                    $livePath != '' && (
-                        strcasecmp($livePath, $path) == 0
-                        || ($pathKey != '' && $this->database->pathSlashlessKey($livePath) == $pathKey)
-                    )
-                ) {
+                if ($livePath != '' && strcasecmp($livePath, $path) == 0) {
                     return trim(strval($live['remote_id'] ?? ''));
                 }
             }
@@ -571,13 +560,7 @@ trait History
                 continue;
             }
             $livePath = $this->database->normalizeLibraryPath($live['path'] ?? '');
-            if (
-                $livePath != ''
-                && (
-                    strcasecmp($livePath, $path) == 0
-                    || ($pathKey != '' && $this->database->pathSlashlessKey($livePath) == $pathKey)
-                )
-            ) {
+            if ($livePath != '' && strcasecmp($livePath, $path) == 0) {
                 return $liveRemote;
             }
             if (intval($live['season'] ?? 0) == $season && intval($live['episode'] ?? 0) == $epnum) {

@@ -299,10 +299,6 @@ trait Library
             $this->libraryImportIndex = null;
         }
 
-        $deduped = $this->database->dedupeLibrary();
-        if (($deduped['movies'] + $deduped['series'] + intval($deduped['episodes'] ?? 0)) > 0) {
-            logger($this->logfile, 'media library dedupeLibrary movies=' . $deduped['movies'] . ' series=' . $deduped['series'] . ' episodes=' . intval($deduped['episodes'] ?? 0));
-        }
         $rehomed = $this->database->rehomeMisplacedEpisodes();
         if (intval($rehomed['moved'] ?? 0) > 0) {
             logger($this->logfile, 'media library rehomeMisplacedEpisodes checked=' . intval($rehomed['checked'] ?? 0) . ' moved=' . intval($rehomed['moved'] ?? 0));
@@ -362,9 +358,6 @@ trait Library
             'platform' => $platform,
             'remote'   => ['movies' => [], 'series' => [], 'episodes' => []],
             'path'     => ['movies' => [], 'series' => [], 'episodes' => []],
-            'slash'    => ['movies' => [], 'series' => [], 'episodes' => []],
-            'identity' => ['movies' => [], 'series' => [], 'episodes' => []],
-            'code'     => ['episodes' => []],
         ];
 
         $tables = [
@@ -380,29 +373,6 @@ trait Library
 
         $this->libraryImportIndex = $index;
         logger($this->logfile, 'media library import index movies=' . count($index['path']['movies']) . ' series=' . count($index['path']['series']) . ' episodes=' . count($index['path']['episodes']));
-    }
-
-    public function libraryImportIdentityKey($bucket, $row)
-    {
-        if ($bucket == 'movies' || $bucket == 'series') {
-            $title = trim(strval($row['title'] ?? ''));
-            if ($title == '') {
-                return '';
-            }
-
-            return strtolower($title) . ':' . intval($row['year'] ?? 0);
-        }
-        if ($bucket == 'episodes') {
-            $title    = trim(strval($row['title'] ?? ''));
-            $seriesId = intval($row['series_id'] ?? 0);
-            if ($title == '' || $seriesId <= 0) {
-                return '';
-            }
-
-            return $seriesId . ':' . intval($row['season'] ?? 0) . ':' . intval($row['episode'] ?? 0) . ':' . strtolower($title);
-        }
-
-        return '';
     }
 
     public function indexLibraryImportRow(&$index, $bucket, $row, $field = '')
@@ -422,28 +392,6 @@ trait Library
         $path = $this->database->normalizeLibraryPath($row['path'] ?? '');
         if ($path != '') {
             $index['path'][$bucket][strtolower($path)] = $row;
-            $slash                                     = $this->database->pathSlashlessKey($path);
-            if ($slash != '') {
-                $index['slash'][$bucket][$slash] = $row;
-            }
-        }
-        if ($bucket == 'movies' || $bucket == 'series' || $bucket == 'episodes') {
-            $identity = $this->libraryImportIdentityKey($bucket, $row);
-            if ($identity != '') {
-                $index['identity'][$bucket][$identity] = $row;
-            }
-        }
-        if ($bucket == 'episodes') {
-            $seriesId = intval($row['series_id'] ?? 0);
-            if ($seriesId > 0) {
-                $code     = $seriesId . ':' . intval($row['season'] ?? 0) . ':' . intval($row['episode'] ?? 0);
-                $existing = $index['code']['episodes'][$code] ?? [];
-                if (!$existing || $this->database->pathLooksMangled($existing['path'] ?? '')) {
-                    $index['code']['episodes'][$code] = $row;
-                } else if (!$this->database->pathLooksMangled($row['path'] ?? '')) {
-                    $index['code']['episodes'][$code] = $row;
-                }
-            }
         }
     }
 
@@ -489,16 +437,7 @@ trait Library
             return [];
         }
 
-        $row = $this->libraryImportIndex['path'][$bucket][strtolower($path)] ?? [];
-        if ($row) {
-            return $row;
-        }
-        $slash = $this->database->pathSlashlessKey($path);
-        if ($slash != '') {
-            return $this->libraryImportIndex['slash'][$bucket][$slash] ?? [];
-        }
-
-        return [];
+        return $this->libraryImportIndex['path'][$bucket][strtolower($path)] ?? [];
     }
 
     public function findLibraryImportItem($table, $platform, $remoteId, $path)
@@ -521,33 +460,6 @@ trait Library
         return [];
     }
 
-    public function findLibraryImportIdentityHit($table, $platform, $remoteId, $identityRow)
-    {
-        $this->warmLibraryImportIndex($platform);
-        $bucket = $this->libraryImportBucket($table);
-        if ($bucket != 'movies' && $bucket != 'series' && $bucket != 'episodes') {
-            return [];
-        }
-        $identity = $this->libraryImportIdentityKey($bucket, $identityRow);
-        if ($identity == '') {
-            return [];
-        }
-
-        return $this->libraryImportIndex['identity'][$bucket][$identity] ?? [];
-    }
-
-    public function findLibraryImportEpisodeCodeHit($platform, $seriesId, $season, $episode)
-    {
-        $this->warmLibraryImportIndex($platform);
-        $seriesId = intval($seriesId);
-        if ($seriesId <= 0) {
-            return [];
-        }
-        $code = $seriesId . ':' . intval($season) . ':' . intval($episode);
-
-        return $this->libraryImportIndex['code']['episodes'][$code] ?? [];
-    }
-
     public function findLibraryImportEpisodePathHit($platform, $remoteId, $path, $season, $episode)
     {
         $pathHit = $this->findLibraryImportPathHit(EPISODE_TABLE, $platform, $path);
@@ -559,22 +471,6 @@ trait Library
         }
 
         return $pathHit;
-    }
-
-    public function findLibraryImportSeriesRow($mediaApp, $item, $episodePath)
-    {
-        $platform   = $mediaApp['platform'];
-        $seriesPath = $this->database->normalizePath($item['path'] ?? $episodePath, 'series');
-        $remoteId   = $item['series_remote_id'] ?? '';
-        $row        = $this->findLibraryImportItem(SERIES_TABLE, $platform, $remoteId, $seriesPath);
-        if ($row) {
-            return $row;
-        }
-
-        return $this->findLibraryImportIdentityHit(SERIES_TABLE, $platform, $remoteId, [
-            'title' => strval($item['series'] ?? ''),
-            'year'  => intval($item['series_year'] ?? ($item['year'] ?? 0)),
-        ]);
     }
 
     public function importLibraryItems($mediaApp, $platformName, $items, &$added, &$updated, &$unchanged)
@@ -692,7 +588,7 @@ trait Library
         }
 
         $currentPath = $this->database->normalizeLibraryPath($row['path'] ?? '');
-        if ($path != '' && !$this->database->pathLooksMangled($path) && ($currentPath == '' || $this->database->pathLooksMangled($row['path'] ?? ''))) {
+        if ($path != '' && $currentPath == '') {
             $sets[]      = "`path` = '" . $this->database->prepare($path) . "'";
             $row['path'] = $path;
         }
@@ -857,7 +753,7 @@ trait Library
 
         $rowPath = $this->database->normalizeLibraryPath($row['path'] ?? '');
         $path    = $this->database->normalizeLibraryPath($path);
-        if ($path != '' && ($rowPath == '' || $this->database->pathLooksMangled($row['path'] ?? '')) && !$this->database->pathLooksMangled($path)) {
+        if ($path != '' && $rowPath == '') {
             return 'updated';
         }
 
@@ -918,24 +814,12 @@ trait Library
         $year     = intval($item['year'] ?? 0);
         $poster   = trim(strval($item['poster'] ?? ''));
         $bucket   = $type == 'movie' ? 'movies' : 'series';
-        $row      = $this->findLibraryImportItem($table, $platform, $remoteId, $path);
-        if (!$row && ($type == 'movie' || $type == 'series')) {
-            $row = $this->findLibraryImportIdentityHit($table, $platform, $remoteId, [
-                'title' => $title,
-                'year'  => $year,
-            ]);
-        }
+        $row = $this->findLibraryImportItem($table, $platform, $remoteId, $path);
         if (!$row) {
             $checked = $this->resolvePlexCheckedPath($mediaApp, $remoteId, $path, $type);
             if ($checked != $path) {
                 $path = $checked;
                 $row  = $this->findLibraryImportItem($table, $platform, $remoteId, $path);
-                if (!$row && ($type == 'movie' || $type == 'series')) {
-                    $row = $this->findLibraryImportIdentityHit($table, $platform, $remoteId, [
-                        'title' => $title,
-                        'year'  => $year,
-                    ]);
-                }
             }
         }
         $outcome = $this->libraryItemOutcomeFromRow($row, $platform, $remoteId, $path);
@@ -958,11 +842,6 @@ trait Library
             return '';
         }
 
-        if ($this->database->pathLooksMangled($path)) {
-            $this->database->setLastError('refusing mangled ' . $type . ' path');
-            return '';
-        }
-
         $flags = $this->platformFlags($platform, $remoteId);
         $id    = 0;
         if ($type == 'movie') {
@@ -980,12 +859,6 @@ trait Library
                     return 'skipping';
                 }
                 $row = $pathHit;
-            }
-            if (!$row && ($type == 'movie' || $type == 'series')) {
-                $row = $this->findLibraryImportIdentityHit($table, $platform, $remoteId, [
-                    'title' => $title,
-                    'year'  => $year,
-                ]);
             }
             $outcome = $this->libraryItemOutcomeFromRow($row, $platform, $remoteId, $path);
             if ($outcome != 'added' && $row) {
@@ -1030,26 +903,9 @@ trait Library
         $path     = $this->database->normalizePath($item['path'] ?? '', 'episode');
         $season   = intval($item['season'] ?? 0);
         $episode  = intval($item['episode'] ?? 0);
-        $row      = $this->findLibraryImportItem(EPISODE_TABLE, $platform, $remoteId, $path);
+        $row = $this->findLibraryImportItem(EPISODE_TABLE, $platform, $remoteId, $path);
         if (!$row) {
             $row = $this->findLibraryImportEpisodePathHit($platform, $remoteId, $path, $season, $episode);
-        }
-        if (!$row) {
-            $seriesRow = $this->findLibraryImportSeriesRow($mediaApp, $item, $path);
-            if ($seriesRow) {
-                $row = $this->findLibraryImportIdentityHit(EPISODE_TABLE, $platform, $remoteId, [
-                    'series_id' => intval($seriesRow['id']),
-                    'season'    => $season,
-                    'episode'   => $episode,
-                    'title'     => strval($item['title'] ?? ''),
-                ]);
-            }
-        }
-        if (!$row && $season >= 0 && $episode > 0) {
-            $seriesRow = $this->findLibraryImportSeriesRow($mediaApp, $item, $path);
-            if ($seriesRow) {
-                $row = $this->findLibraryImportEpisodeCodeHit($platform, intval($seriesRow['id']), $season, $episode);
-            }
         }
         if (!$row) {
             $checked = $this->resolvePlexCheckedPath($mediaApp, $remoteId, $path, 'episode');
@@ -1059,33 +915,11 @@ trait Library
                 if (!$row) {
                     $row = $this->findLibraryImportEpisodePathHit($platform, $remoteId, $path, $season, $episode);
                 }
-                if (!$row) {
-                    $seriesRow = $this->findLibraryImportSeriesRow($mediaApp, $item, $path);
-                    if ($seriesRow) {
-                        $row = $this->findLibraryImportIdentityHit(EPISODE_TABLE, $platform, $remoteId, [
-                            'series_id' => intval($seriesRow['id']),
-                            'season'    => $season,
-                            'episode'   => $episode,
-                            'title'     => strval($item['title'] ?? ''),
-                        ]);
-                    }
-                }
-                if (!$row && $season >= 0 && $episode > 0) {
-                    $seriesRow = $this->findLibraryImportSeriesRow($mediaApp, $item, $path);
-                    if ($seriesRow) {
-                        $row = $this->findLibraryImportEpisodeCodeHit($platform, intval($seriesRow['id']), $season, $episode);
-                    }
-                }
             }
         }
         $outcome = $this->libraryItemOutcomeFromRow($row, $platform, $remoteId, $path);
 
         if ($outcome == 'unchanged' && $row) {
-            if ($path != '' && $this->database->pathLooksMangled($row['path'] ?? '') && !$this->database->pathLooksMangled($path)) {
-                $this->applyLibraryImportRowUpdate(EPISODE_TABLE, $platform, $remoteId, $path, $row);
-                $updated['episodes']++;
-                return 'updating';
-            }
             $unchanged['episodes']++;
             return 'skipping';
         }
@@ -1098,11 +932,6 @@ trait Library
 
         if ($path == '') {
             $this->database->setLastError('empty episode path');
-            return '';
-        }
-
-        if ($this->database->pathLooksMangled($path)) {
-            $this->database->setLastError('refusing mangled episode path');
             return '';
         }
 
@@ -1128,26 +957,10 @@ trait Library
                     return 'skipping';
                 }
             }
-            if (!$row) {
-                $row = $this->findLibraryImportIdentityHit(EPISODE_TABLE, $platform, $remoteId, [
-                    'series_id' => intval($seriesId),
-                    'season'    => $season,
-                    'episode'   => $episode,
-                    'title'     => strval($item['title'] ?? ''),
-                ]);
-            }
-            if (!$row) {
-                $row = $this->findLibraryImportEpisodeCodeHit($platform, intval($seriesId), $season, $episode);
-            }
             $outcome = $this->libraryItemOutcomeFromRow($row, $platform, $remoteId, $path);
             if ($outcome != 'added' && $row) {
                 $this->database->setLastError('');
                 if ($outcome == 'unchanged') {
-                    if ($this->database->pathLooksMangled($row['path'] ?? '') && !$this->database->pathLooksMangled($path)) {
-                        $this->applyLibraryImportRowUpdate(EPISODE_TABLE, $platform, $remoteId, $path, $row);
-                        $updated['episodes']++;
-                        return 'updating';
-                    }
                     $unchanged['episodes']++;
                     return 'skipping';
                 }

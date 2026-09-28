@@ -12,4 +12,6 @@ function translate(key, args) {
     }
     return text;
 }
+// ---------------------------------------------------------------------------------------------
+
 window.translate = translate;

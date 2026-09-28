@@ -121,6 +121,44 @@ switch ($_POST['event'] ?? '') {
         ]);
         exit;
 
+    case 'refreshLibraryPoster':
+        $type = ($_POST['type'] ?? '') == 'series' ? 'series' : 'movie';
+        $id   = intval($_POST['id'] ?? 0);
+        $item = $database->getLibraryItem($type, $id);
+        if (!$item) {
+            echo json_encode(['error' => true, 'message' => translate('libraryItemNotFound')]);
+            exit;
+        }
+        $file = $mediaApps->libraryPosterPath($type, $id);
+        if (is_file($file) && !unlink($file)) {
+            echo json_encode(['error' => true, 'message' => translate('couldNotRefreshPoster')]);
+            exit;
+        }
+        echo json_encode(['error' => false, 'message' => translate('posterRefreshed')]);
+        exit;
+
+    case 'itemDetails':
+        $type = ($_POST['type'] ?? '') == 'series' ? 'series' : 'movie';
+        $id   = intval($_POST['id'] ?? 0);
+        $item = $database->getLibraryItem($type, $id);
+        if (!$item) {
+            echo '<div class="alert alert-danger mb-0" role="alert">' . htmlEscape(translate('libraryItemNotFound')) . '</div>';
+            exit;
+        }
+        $detailRows = [
+            [translate('id'), $item['id'] ?? ''],
+            [translate('type'), translate($type)],
+            [translate('name'), $item['title'] ?? ''],
+            [translate('year'), $item['year'] ?? ''],
+            [translate('path'), $item['path'] ?? ''],
+            [translate('plexId'), $item['plex_remote_id'] ?? ''],
+            [translate('embyId'), $item['emby_remote_id'] ?? ''],
+            [translate('jellyfinId'), $item['jellyfin_remote_id'] ?? ''],
+            [translate('poster'), $item['poster'] ?? ''],
+        ];
+        require RELATIVE_PATH . 'pages/library/itemDetails.php';
+        exit;
+
     case 'itemWatch':
         $type = ($_POST['type'] ?? '') == 'series' ? 'series' : 'movie';
         $id   = intval($_POST['id'] ?? 0);

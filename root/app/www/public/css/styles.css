@@ -449,7 +449,11 @@ body {
 
 .library-card {
     cursor: pointer;
-    overflow: hidden;
+    position: relative;
+}
+
+.library-card:has(.dropdown-menu.show) {
+    z-index: 4;
 }
 
 .library-card:hover {
@@ -473,6 +477,35 @@ body {
     letter-spacing: 0.02em;
     text-transform: uppercase;
     color: #fff;
+    border-top-left-radius: calc(var(--bs-border-radius) - var(--bs-border-width));
+    border-top-right-radius: calc(var(--bs-border-radius) - var(--bs-border-width));
+}
+
+.library-type-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex: 0 0 auto;
+}
+
+.library-card-menu {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    padding: 0;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.library-card-menu-wrap .dropdown-menu {
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+    font-size: 0.875rem;
+    color: var(--bs-body-color);
 }
 
 .library-type-label {
