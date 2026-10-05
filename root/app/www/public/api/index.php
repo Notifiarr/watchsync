@@ -44,6 +44,9 @@ switch (true) {
         $mediaApp = 'plex';
         break;
 }
+if ($mediaApp == '') {
+    $mediaApp = webhookAppSlug($_POST);
+}
 
 if ($mediaApp != '') {
     $webhookParsed = webhookParse($mediaApp, $_POST);

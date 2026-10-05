@@ -405,6 +405,73 @@ function webhookPlatformId($slug)
     }
 }
 
+function webhookPlatformSlug($platform)
+{
+    switch (intval($platform)) {
+        case MediaPlatforms::EMBY:
+            return 'emby';
+        case MediaPlatforms::JELLYFIN:
+            return 'jellyfin';
+        case MediaPlatforms::PLEX:
+            return 'plex';
+    }
+
+    return '';
+}
+
+function webhookServerIds($post)
+{
+    $post   = webhookBody(is_array($post) ? $post : []);
+    $server = is_array($post['Server'] ?? null) ? $post['Server'] : [];
+    $item   = is_array($post['Item'] ?? null) ? $post['Item'] : [];
+    $user   = is_array($post['User'] ?? null) ? $post['User'] : [];
+    $ids    = [
+        $server['Id'] ?? '',
+        $server['id'] ?? '',
+        $server['uuid'] ?? '',
+        $item['ServerId'] ?? '',
+        $user['ServerId'] ?? '',
+        $post['ServerId'] ?? '',
+    ];
+    $values = [];
+    foreach ($ids as $id) {
+        $id = trim(strval($id));
+        if ($id != '' && !in_array($id, $values)) {
+            $values[] = $id;
+        }
+    }
+
+    return $values;
+}
+
+function webhookAppSlug($post)
+{
+    global $database;
+
+    $ids = webhookServerIds($post);
+    if (!$ids) {
+        return '';
+    }
+
+    foreach ($database->getMediaApps() as $app) {
+        $serverId = trim(strval($app['server_id'] ?? ''));
+        if ($serverId == '') {
+            continue;
+        }
+        foreach ($ids as $id) {
+            if (strcasecmp($serverId, $id) != 0) {
+                continue;
+            }
+            $slug = webhookPlatformSlug($app['platform'] ?? 0);
+            if ($slug != '') {
+                return $slug;
+            }
+        }
+    }
+
+    return '';
+}
+
 function webhookFindApp($slug, $serverId)
 {
     global $database;
