@@ -38,6 +38,11 @@ function viewWebhookLog(name)
                 onOpen: function () {
                     $('#webhook-log-dialog .modal-dialog').removeClass('modal-dialog-scrollable');
                     $('#webhook-log-dialog .modal-body').addClass('sync-log-modal-body');
+                    $('#webhook-log-dialog .modal-header').find('.webhook-log-copy').remove();
+                    if (!(parseInt(response.size, 10) > 2097152)) {
+                        var icon = $('<i class="fas fa-copy text-primary webhook-log-copy" style="cursor: pointer; margin-left: 0.5rem;" title="' + translate('copy') + '" onclick="clipboard(\'webhookLogPane\', \'log\');"></i>');
+                        $('#webhook-log-dialog .modal-header .modal-title').after(icon);
+                    }
                     var pane = $('#webhook-log-dialog #webhookLogPane');
                     pane.scrollTop(pane.prop('scrollHeight'));
                 }

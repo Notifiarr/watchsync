@@ -116,13 +116,15 @@ while ($row = $database->fetchAssoc($res)) {
                         $path     = 'webhooks/' . $log['file'];
                         $username = webhookLogUsername($log, $webhookUsers);
                         $type     = webhookEventLabel($log['event']);
+                        $code     = strval($log['code'] ?? '');
+                        $codeText = $code == 'queued' ? translate('queued') : $code;
                         ?>
                         <tr style="cursor: pointer;" onclick="viewWebhookLog('<?= htmlEscape($path) ?>');">
                             <td style="width: 20%;"><?= htmlEscape($log['time'] ? date('Y-m-d g:i:s A', $log['time']) : '') ?></td>
                             <td style="width: 12%;"><?= $log['app'] != '' ? htmlEscape(translate($log['app'])) : '' ?></td>
                             <td><?= htmlEscape($type) ?></td>
                             <td style="width: 20%;"><?= htmlEscape($username) ?></td>
-                            <td class="<?= intval($log['code'] ?? 0) >= 400 ? 'text-danger' : '' ?>" style="width: 8%;"><?= htmlEscape($log['code'] ?? '') ?></td>
+                            <td class="<?= $code != 'queued' && intval($code) >= 400 ? 'text-danger' : '' ?>" style="width: 8%;"><?= htmlEscape($codeText) ?></td>
                             <td class="text-center" style="width: 5%;" onclick="event.stopPropagation();">
                                 <i class="fas fa-trash text-danger" style="cursor: pointer;" title="<?= htmlEscape(translate('remove')) ?>" onclick="deleteWebhookLog('<?= htmlEscape($log['file']) ?>');"></i>
                             </td>

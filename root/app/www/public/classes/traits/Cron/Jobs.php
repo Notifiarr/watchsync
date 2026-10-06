@@ -871,10 +871,9 @@ trait Jobs
             'finished'     => intval($state['finished'] ?? 0),
         ];
         if (!$this->writeJobHeader()) {
+            $this->currentJob = [];
             return [];
         }
-
-        $this->processQueue();
 
         return $this->formatJob($this->currentJob);
     }

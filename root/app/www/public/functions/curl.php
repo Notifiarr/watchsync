@@ -102,7 +102,7 @@ function curl($url, $headers = [], $method = 'GET', $payload = '', $userPass = [
         }
     }
 
-    return [
+    $result = [
         'url'      => $url,
         'method'   => $method,
         'payload'  => $payload ?? '',
@@ -110,4 +110,11 @@ function curl($url, $headers = [], $method = 'GET', $payload = '', $userPass = [
         'error'    => $error,
         'code'     => $code,
     ];
+    if (function_exists('webhookRecordResponse')) {
+        $recorded          = $result;
+        $recorded['error'] = $curlError != '' ? $curlError : $error;
+        webhookRecordResponse($recorded);
+    }
+
+    return $result;
 }

@@ -1595,6 +1595,7 @@ trait History
 
         logger($this->logfile, 'webhook ' . strval($this->currentJob['webhook_event'] ?? '') . ' ' . strval($user['username'] ?? ''));
         $pushed = webhookPushWatch($app, $user, $item, $type, $state);
+        webhookAppendResponses($this->currentJob['webhook_log'] ?? '');
         $this->addStat('pushed', $pushed);
         $destinations = $this->currentJob['destination_apps'] ?? [];
         if (!is_array($destinations)) {

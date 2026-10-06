@@ -380,7 +380,8 @@ function webhookWriteLog($slug, $userId, $event, $post, $code)
 
     $slug  = in_array($slug, ['plex', 'emby', 'jellyfin'], true) ? $slug : '-';
     $event = trim(strval($event)) == '' ? '-' : webhookEventSegment($event);
-    $code  = str_pad(strval(intval($code)), 3, '0', STR_PAD_LEFT);
+    $code  = strtolower(trim(strval($code)));
+    $code  = $code == 'queued' ? 'queued' : str_pad(strval(intval($code)), 3, '0', STR_PAD_LEFT);
     $stamp = str_replace('.', '', sprintf('%.6f', microtime(true)));
     $name  = $slug . '_' . webhookUserSegment($userId) . '_' . $event . '_' . $code . '_' . $stamp . '.log';
     $path  = WEBHOOK_LOGS_PATH . $name;
@@ -388,9 +389,189 @@ function webhookWriteLog($slug, $userId, $event, $post, $code)
     if ($json == false) {
         $json = '{}';
     }
+    if ($code != 'queued') {
+        $extra = webhookResponseText();
+        if ($extra != '') {
+            $json .= "\n\n" . $extra;
+        }
+    }
     file_put_contents($path, $json);
 
     return $name;
+}
+
+function webhookLogContents($path)
+{
+    $raw   = is_file($path) ? strval(file_get_contents($path)) : '';
+    $parts = explode("\n----------\n", $raw, 2);
+
+    return $parts[0];
+}
+
+function webhookRedactUrl($url)
+{
+    return preg_replace('/([?&](X-Plex-Token|api_key|apikey|apiKey|AccessToken)=)[^&]*/i', '$1***', strval($url));
+}
+
+function webhookResponseBody($value)
+{
+    if ($value == null) {
+        return '';
+    }
+    if (is_array($value) || is_object($value)) {
+        $json = json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+        return $json == false ? '' : $json;
+    }
+
+    return trim(strval($value));
+}
+
+function webhookRecordResponse($curl)
+{
+    global $webhookResponseApp, $webhookResponses;
+
+    if (!is_array($webhookResponseApp) || !$webhookResponseApp || !is_array($curl)) {
+        return;
+    }
+    if (!is_array($webhookResponses)) {
+        $webhookResponses = [];
+    }
+
+    $webhookResponses[] = [
+        'app'      => trim(strval($webhookResponseApp['name'] ?? '')),
+        'method'   => strval($curl['method'] ?? ''),
+        'url'      => webhookRedactUrl($curl['url'] ?? ''),
+        'payload'  => $curl['payload'] ?? '',
+        'code'     => intval($curl['code'] ?? 0),
+        'response' => $curl['response'] ?? '',
+        'error'    => $curl['error'] ?? '',
+    ];
+}
+
+function webhookResponseText()
+{
+    global $webhookResponses;
+
+    if (!is_array($webhookResponses) || !$webhookResponses) {
+        return '';
+    }
+
+    $blocks = [];
+    foreach ($webhookResponses as $row) {
+        $lines   = [];
+        $lines[] = ($row['app'] ?? '') != '' ? $row['app'] : 'App';
+        $lines[] = trim(strval($row['method'] ?? '') . ' ' . strval($row['url'] ?? ''));
+        $payload = webhookResponseBody($row['payload'] ?? '');
+        if ($payload != '') {
+            $lines[] = 'request:';
+            $lines[] = $payload;
+        }
+        $lines[]  = 'code: ' . intval($row['code'] ?? 0);
+        $error    = webhookResponseBody($row['error'] ?? '');
+        $response = webhookResponseBody($row['response'] ?? '');
+        if ($error != '') {
+            $lines[] = 'error:';
+            $lines[] = $error;
+        }
+        $lines[]   = 'response:';
+        $lines[]   = $response != '' ? $response : '(empty)';
+        $blocks[]  = implode("\n", $lines);
+    }
+
+    return "----------\n" . implode("\n\n", $blocks);
+}
+
+function webhookAppendResponses($name)
+{
+    $name = basename(strval($name));
+    if ($name == '' || !str_ends_with($name, '.log')) {
+        return;
+    }
+
+    $path = WEBHOOK_LOGS_PATH . $name;
+    if (!is_file($path)) {
+        return;
+    }
+
+    $extra = webhookResponseText();
+    if ($extra == '') {
+        return;
+    }
+
+    file_put_contents($path, rtrim(webhookLogContents($path)) . "\n\n" . $extra);
+}
+
+function webhookOtherAppsOffline($sourceApp)
+{
+    global $database, $mediaApps;
+
+    $sourceId = intval($sourceApp['id'] ?? 0);
+    foreach ($database->getMediaApps() as $app) {
+        if (intval($app['id'] ?? 0) == $sourceId || empty($app['active'])) {
+            continue;
+        }
+        if (!$mediaApps->isOnline($app)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function webhookReplayQueued()
+{
+    if (!is_dir(WEBHOOK_LOGS_PATH)) {
+        return;
+    }
+
+    $files = glob(WEBHOOK_LOGS_PATH . '*_queued_*.log') ?: [];
+    sort($files);
+    foreach ($files as $path) {
+        $name = basename($path);
+        if (preg_match('/^(plex|emby|jellyfin)_([A-Za-z0-9-]*)_([^_]+)_queued_(\d+)\.log$/', $name, $match) != 1) {
+            continue;
+        }
+
+        $slug = $match[1];
+        $post = webhookDecoded(webhookLogContents($path));
+        if (!$post) {
+            logger(CRON_WEBHOOK_QUEUE_LOG, 'skip empty ' . $name);
+            continue;
+        }
+
+        $parsed = webhookParse($slug, $post);
+        $app    = webhookFindApp($slug, $parsed['serverId'] ?? '');
+        if ($app && webhookOtherAppsOffline($app)) {
+            logger(CRON_WEBHOOK_QUEUE_LOG, 'waiting ' . $name);
+            continue;
+        }
+
+        global $webhookResponses, $webhookLogCode, $webhookResponseApp, $webhookReplay;
+        $webhookResponses   = [];
+        $webhookLogCode     = '';
+        $webhookResponseApp = [];
+        $webhookReplay      = true;
+        $_POST              = $post;
+        logger(CRON_WEBHOOK_QUEUE_LOG, 'replay ' . $name);
+        webhookApply($slug, $parsed);
+        $webhookReplay = false;
+        if ($webhookLogCode == 'queued') {
+            logger(CRON_WEBHOOK_QUEUE_LOG, 'still queued ' . $name);
+            continue;
+        }
+
+        $extra = webhookResponseText();
+        if ($extra != '') {
+            file_put_contents($path, rtrim(webhookLogContents($path)) . "\n\n" . $extra);
+        }
+
+        $renamed = preg_replace('/_queued_(\d+)\.log$/', '_200_$1.log', $name);
+        $dest    = WEBHOOK_LOGS_PATH . $renamed;
+        if ($renamed != $name && !is_file($dest) && rename($path, $dest)) {
+            logger(CRON_WEBHOOK_QUEUE_LOG, 'done ' . $renamed);
+        }
+    }
 }
 
 function webhookPlatformId($slug)
@@ -610,7 +791,11 @@ function webhookSavePayloadItem($app, $slug)
 
 function webhookApply($slug, $parsed)
 {
-    global $database, $cron;
+    global $database, $cron, $webhookResponses, $webhookResponseApp, $webhookLogCode, $webhookReplay;
+
+    $webhookResponses   = [];
+    $webhookResponseApp = [];
+    $webhookLogCode     = '';
 
     $label = ucfirst($slug);
     $app   = webhookFindApp($slug, $parsed['serverId'] ?? '');
@@ -669,9 +854,16 @@ function webhookApply($slug, $parsed)
     }
 
     if (in_array($action, ['pause', 'stop', 'scrobble'], true)) {
-        $queued = $cron->queueWebhookSync(intval($app['id']), intval($user['id']), $action, $item, $type, $state);
-        if (!$queued && !empty($saved['changed'])) {
+        if (webhookOtherAppsOffline($app)) {
+            $webhookLogCode = 'queued';
+        }
+        if (!empty($webhookReplay)) {
             webhookPushWatch($app, $user, $item, $type, $state);
+        } else {
+            $queued = $cron->queueWebhookSync(intval($app['id']), intval($user['id']), $action, $item, $type, $state);
+            if (!$queued && !empty($saved['changed'])) {
+                webhookPushWatch($app, $user, $item, $type, $state);
+            }
         }
     }
 
@@ -680,7 +872,7 @@ function webhookApply($slug, $parsed)
 
 function webhookPushWatch($sourceApp, $sourceUser, $item, $type, $state)
 {
-    global $database, $mediaApps, $cron;
+    global $database, $mediaApps, $cron, $webhookResponseApp;
 
     $pushed        = 0;
     $destinations = [];
@@ -716,7 +908,9 @@ function webhookPushWatch($sourceApp, $sourceUser, $item, $type, $state)
         } else {
             $database->upsertUserEpisodeLink($item['id'], $userId, $platform, $state['started'], $state['inprogress'], $state['finished']);
         }
+        $webhookResponseApp = $linkedApp;
         $mediaApps->setWatchStatus($linkedApp, $linkedUser, $remoteId, $state['started'], $state['inprogress'], $state['finished']);
+        $webhookResponseApp = [];
         $name = trim(strval($linkedApp['name'] ?? ''));
         if ($name != '' && !in_array($name, $destinations)) {
             $destinations[] = $name;
@@ -761,7 +955,7 @@ function webhookLogUsername($log, $users)
     $path = WEBHOOK_LOGS_PATH . strval($log['file'] ?? '');
     $json = [];
     if (is_file($path)) {
-        $json = webhookDecoded(file_get_contents($path));
+        $json = webhookDecoded(webhookLogContents($path));
     }
 
     $body = webhookBody($json);
@@ -976,7 +1170,7 @@ function webhookLogRows()
     foreach (glob(WEBHOOK_LOGS_PATH . '*.log') ?: [] as $path) {
         $name = basename($path);
         $code = '';
-        if (preg_match('/^(plex|emby|jellyfin|-)_([A-Za-z0-9-]*)_([^_]+)_(\d{3})_(\d+)\.log$/', $name, $match)) {
+        if (preg_match('/^(plex|emby|jellyfin|-)_([A-Za-z0-9-]*)_([^_]+)_(queued|\d{3})_(\d+)\.log$/', $name, $match)) {
             $code   = $match[4];
             $digits = $match[5];
         } else if (preg_match('/^(plex|emby|jellyfin)_([A-Za-z0-9-]*)_([^_]+)_(\d+)\.log$/', $name, $match)) {

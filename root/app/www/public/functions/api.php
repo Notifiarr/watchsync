@@ -26,14 +26,22 @@ function maskAPI($apikey)
 
 function apiResponse($code, $message)
 {
-    global $apiKey, $mediaApp, $apiStarted, $webhookParsed;
+    global $apiKey, $mediaApp, $apiStarted, $webhookParsed, $webhookLogCode, $cron;
 
     $parsed = is_array($webhookParsed ?? null) ? $webhookParsed : [];
     $event  = strval($parsed['event'] ?? '');
     if (in_array($parsed['action'] ?? '', ['pause', 'stop', 'scrobble', 'new'], true)) {
         $event = $parsed['action'];
     }
-    webhookWriteLog($mediaApp ?? '', $parsed['userId'] ?? '', $event, $_POST, $code);
+    $logCode = ($webhookLogCode ?? '') != '' ? $webhookLogCode : $code;
+    $logName = webhookWriteLog($mediaApp ?? '', $parsed['userId'] ?? '', $event, $_POST, $logCode);
+    if (!empty($cron->currentJob['webhook_item'])) {
+        if ($logName != '' && strtolower(trim(strval($logCode))) != 'queued') {
+            $cron->currentJob['webhook_log'] = $logName;
+            $cron->writeJobHeader();
+        }
+        $cron->processQueue();
+    }
 
     $parameters = $_GET;
     unset($parameters['apikey']);

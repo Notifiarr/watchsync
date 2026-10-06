@@ -23,6 +23,7 @@ trait Dispatcher
             $this->processQueue();
             $this->dispatchBackup();
             $this->dispatchHousekeeper();
+            $this->dispatchWebhookQueue();
         } finally {
             $this->removeLockFile($lock);
             $this->dispatchLogClose();
@@ -88,6 +89,37 @@ trait Dispatcher
         }
 
         return $result;
+    }
+
+    public function dispatchWebhookQueue()
+    {
+        if (intval(date('i')) % 10 != 0) {
+            return 'wait';
+        }
+        $result = $this->hasLockFile('webhookQueue') ? 'running' : 'started';
+        $this->dispatchLog('webhookQueue=' . $result);
+        if ($result == 'started') {
+            $this->spawnScript('webhookQueue.php', '', CRON_DISPATCHER_LOG);
+        }
+
+        return $result;
+    }
+
+    public function runWebhookQueue()
+    {
+        logger(CRON_WEBHOOK_QUEUE_LOG, 'webhookQueue ->');
+        $lock = $this->setLockFile('webhookQueue');
+        try {
+            if (!$lock) {
+                logger(CRON_WEBHOOK_QUEUE_LOG, 'already running');
+                return;
+            }
+
+            webhookReplayQueued();
+        } finally {
+            $this->removeLockFile($lock);
+            logger(CRON_WEBHOOK_QUEUE_LOG, 'webhookQueue <-');
+        }
     }
 
     public function runBackup($type = '')
@@ -236,6 +268,9 @@ trait Dispatcher
             while ($log = readdir($folder)) {
                 $path = $thisDir . $log;
                 if ($log[0] == '.' || is_dir($path) || !isLogFile($log) || str_ends_with($log, '.lock')) {
+                    continue;
+                }
+                if ($group == 'webhooks' && preg_match('/_queued_\d+\.log$/', $log) == 1) {
                     continue;
                 }
 
