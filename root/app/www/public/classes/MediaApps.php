@@ -1117,6 +1117,10 @@ class MediaApps
         if (intval($mediaApp['platform'] ?? 0) != MediaPlatforms::PLEX) {
             return false;
         }
+        $type = trim(strval($user['user_type'] ?? ''));
+        if ($type == 'home' || $type == 'guest') {
+            return false;
+        }
 
         return trim(strval($user['email'] ?? '')) != '';
     }

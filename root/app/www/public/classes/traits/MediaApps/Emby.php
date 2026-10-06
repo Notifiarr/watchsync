@@ -750,7 +750,7 @@ trait Emby
             'Id'              => $remoteId,
             'CurrentPw'       => '',
             'CurrentPassword' => '',
-            'NewPw'           => $password,
+            'NewPw'           => sha1($password),
             'ResetPassword'   => false,
         ]);
         $curl    = curl(sprintf(MediaAppEndpoints::ENDPOINT_EMBY_USER_PASSWORD, $url, rawurlencode($remoteId)), $this->embyHeaders($apikey), 'POST', $payload);
