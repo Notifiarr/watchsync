@@ -389,11 +389,9 @@ function webhookWriteLog($slug, $userId, $event, $post, $code)
     if ($json == false) {
         $json = '{}';
     }
-    if ($code != 'queued') {
-        $extra = webhookResponseText();
-        if ($extra != '') {
-            $json .= "\n\n" . $extra;
-        }
+    $extra = webhookResponseText();
+    if ($extra != '') {
+        $json .= "\n\n" . $extra;
     }
     file_put_contents($path, $json);
 
@@ -502,23 +500,6 @@ function webhookAppendResponses($name)
     file_put_contents($path, rtrim(webhookLogContents($path)) . "\n\n" . $extra);
 }
 
-function webhookOtherAppsOffline($sourceApp)
-{
-    global $database, $mediaApps;
-
-    $sourceId = intval($sourceApp['id'] ?? 0);
-    foreach ($database->getMediaApps() as $app) {
-        if (intval($app['id'] ?? 0) == $sourceId || empty($app['active'])) {
-            continue;
-        }
-        if (!$mediaApps->isOnline($app)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 function webhookReplayQueued()
 {
     if (!is_dir(WEBHOOK_LOGS_PATH)) {
@@ -541,12 +522,6 @@ function webhookReplayQueued()
         }
 
         $parsed = webhookParse($slug, $post);
-        $app    = webhookFindApp($slug, $parsed['serverId'] ?? '');
-        if ($app && webhookOtherAppsOffline($app)) {
-            logger(CRON_WEBHOOK_QUEUE_LOG, 'waiting ' . $name);
-            continue;
-        }
-
         global $webhookResponses, $webhookLogCode, $webhookResponseApp, $webhookReplay;
         $webhookResponses   = [];
         $webhookLogCode     = '';
@@ -842,7 +817,7 @@ function webhookApply($slug, $parsed)
         }
         $existing = $database->getUserMovieLink($item['id'], $user['id'], $platform);
         $state    = webhookWatchState($action, $parsed['progress'] ?? 0, $parsed['runtime'] ?? 0, $existing);
-        $saved    = $database->upsertUserMovieLink($item['id'], $user['id'], $platform, $state['started'], $state['inprogress'], $state['finished']);
+        $database->upsertUserMovieLink($item['id'], $user['id'], $platform, $state['started'], $state['inprogress'], $state['finished']);
     } else {
         $item = $database->getEpisodeByRemoteId($platform, $remoteId);
         if (!$item) {
@@ -850,20 +825,13 @@ function webhookApply($slug, $parsed)
         }
         $existing = $database->getUserEpisodeLink($item['id'], $user['id'], $platform);
         $state    = webhookWatchState($action, $parsed['progress'] ?? 0, $parsed['runtime'] ?? 0, $existing);
-        $saved    = $database->upsertUserEpisodeLink($item['id'], $user['id'], $platform, $state['started'], $state['inprogress'], $state['finished']);
+        $database->upsertUserEpisodeLink($item['id'], $user['id'], $platform, $state['started'], $state['inprogress'], $state['finished']);
     }
 
     if (in_array($action, ['pause', 'stop', 'scrobble'], true)) {
-        if (webhookOtherAppsOffline($app)) {
-            $webhookLogCode = 'queued';
-        }
-        if (!empty($webhookReplay)) {
-            webhookPushWatch($app, $user, $item, $type, $state);
-        } else {
-            $queued = $cron->queueWebhookSync(intval($app['id']), intval($user['id']), $action, $item, $type, $state);
-            if (!$queued && !empty($saved['changed'])) {
-                webhookPushWatch($app, $user, $item, $type, $state);
-            }
+        webhookPushWatch($app, $user, $item, $type, $state);
+        if (empty($webhookReplay)) {
+            $cron->queueWebhookSync(intval($app['id']), intval($user['id']), $action, $item, $type, $state, 1);
         }
     }
 
@@ -872,7 +840,7 @@ function webhookApply($slug, $parsed)
 
 function webhookPushWatch($sourceApp, $sourceUser, $item, $type, $state)
 {
-    global $database, $mediaApps, $cron, $webhookResponseApp;
+    global $database, $mediaApps, $cron, $webhookResponseApp, $webhookResponses, $webhookLogCode;
 
     $pushed        = 0;
     $destinations = [];
@@ -899,7 +867,20 @@ function webhookPushWatch($sourceApp, $sourceUser, $item, $type, $state)
         $platform = intval($linkedApp['platform']);
         $field    = $database->mediaLibraryRemoteField($platform);
         $remoteId = trim(strval($item[$field] ?? ''));
+        if (!is_array($webhookResponses)) {
+            $webhookResponses = [];
+        }
+        $appName = trim(strval($linkedApp['name'] ?? ''));
         if ($remoteId == '') {
+            $webhookResponses[] = [
+                'app'      => $appName,
+                'method'   => '',
+                'url'      => '',
+                'payload'  => '',
+                'code'     => 0,
+                'response' => '',
+                'error'    => 'no remote id',
+            ];
             continue;
         }
 
@@ -908,10 +889,35 @@ function webhookPushWatch($sourceApp, $sourceUser, $item, $type, $state)
         } else {
             $database->upsertUserEpisodeLink($item['id'], $userId, $platform, $state['started'], $state['inprogress'], $state['finished']);
         }
+        if (!$mediaApps->isOnline($linkedApp)) {
+            $webhookResponses[] = [
+                'app'      => $appName,
+                'method'   => '',
+                'url'      => rtrim(trim(strval($linkedApp['url'] ?? '')), '/'),
+                'payload'  => '',
+                'code'     => 0,
+                'response' => '',
+                'error'    => 'offline',
+            ];
+            $webhookLogCode = 'queued';
+            continue;
+        }
+
+        $before             = count($webhookResponses);
         $webhookResponseApp = $linkedApp;
         $mediaApps->setWatchStatus($linkedApp, $linkedUser, $remoteId, $state['started'], $state['inprogress'], $state['finished']);
         $webhookResponseApp = [];
-        $name = trim(strval($linkedApp['name'] ?? ''));
+        $added              = array_slice($webhookResponses, $before);
+        if (!$added) {
+            $webhookLogCode = 'queued';
+        }
+        foreach ($added as $row) {
+            $status = intval($row['code'] ?? 0);
+            if ($status < 200 || $status > 299) {
+                $webhookLogCode = 'queued';
+            }
+        }
+        $name = $appName;
         if ($name != '' && !in_array($name, $destinations)) {
             $destinations[] = $name;
         }

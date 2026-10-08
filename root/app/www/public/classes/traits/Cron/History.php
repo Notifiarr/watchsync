@@ -1594,6 +1594,10 @@ trait History
         }
 
         logger($this->logfile, 'webhook ' . strval($this->currentJob['webhook_event'] ?? '') . ' ' . strval($user['username'] ?? ''));
+        if (!empty($this->currentJob['webhook_pushed'])) {
+            logger($this->logfile, 'webhook push handled');
+            return;
+        }
         $pushed = webhookPushWatch($app, $user, $item, $type, $state);
         webhookAppendResponses($this->currentJob['webhook_log'] ?? '');
         $this->addStat('pushed', $pushed);

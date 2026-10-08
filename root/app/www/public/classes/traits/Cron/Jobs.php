@@ -847,7 +847,7 @@ trait Jobs
         return $job ?: [];
     }
 
-    public function queueWebhookSync($mediaAppId, $userId, $event, $item, $type, $state)
+    public function queueWebhookSync($mediaAppId, $userId, $event, $item, $type, $state, $alreadyPushed = 0)
     {
         $job = $this->createJob($mediaAppId, [$userId], MediaSyncModes::PUSH, MediaSyncTypes::HISTORY, [], 0, MediaSyncTriggers::WEBHOOK);
         if (!$job) {
@@ -870,6 +870,9 @@ trait Jobs
             'inprogress'   => intval($state['inprogress'] ?? 0),
             'finished'     => intval($state['finished'] ?? 0),
         ];
+        if ($alreadyPushed) {
+            $this->currentJob['webhook_pushed'] = 1;
+        }
         if (!$this->writeJobHeader()) {
             $this->currentJob = [];
             return [];
